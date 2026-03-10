@@ -1,0 +1,15 @@
+token.himark.me {
+  encode gzip zstd
+  @legacyAdmin path /admin /admin/*
+  redir @legacyAdmin https://admin.himark.me/auth-center 308
+  reverse_proxy api:3080
+}
+
+admin.himark.me {
+  encode gzip zstd
+
+  @adminApi path /admin-api/*
+  reverse_proxy @adminApi api:3080
+
+  reverse_proxy admin-web:80
+}

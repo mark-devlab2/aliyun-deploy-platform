@@ -1,0 +1,30 @@
+{
+  "serviceId": "feishu-token-service",
+  "projectName": "feishu-token-service",
+  "composeFile": "services/feishu-token-service/compose.prod.yml",
+  "runtimeDir": "runtime/feishu-token-service",
+  "images": {
+    "api": "ghcr.io/mark-devlab2/feishu-token-service-api",
+    "admin-web": "ghcr.io/mark-devlab2/feishu-token-service-admin-web"
+  },
+  "targets": {
+    "api": {
+      "pullServices": ["api"],
+      "upServices": ["api"],
+      "runPrisma": true,
+      "healthChecks": ["https://token.himark.me/health"]
+    },
+    "admin-web": {
+      "pullServices": ["admin-web"],
+      "upServices": ["admin-web", "caddy"],
+      "runPrisma": false,
+      "healthChecks": ["https://admin.himark.me/login"]
+    },
+    "full": {
+      "pullServices": ["api", "admin-web"],
+      "upServices": ["api", "admin-web", "caddy"],
+      "runPrisma": true,
+      "healthChecks": ["https://token.himark.me/health", "https://admin.himark.me/login"]
+    }
+  }
+}
