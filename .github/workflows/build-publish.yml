@@ -49,6 +49,15 @@ jobs:
           path: .deploy-platform
           token: ${{ secrets.PLATFORM_REPO_TOKEN || github.token }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install service dependencies
+        run: npm ci
+
       - name: Resolve build contract
         id: contract
         run: |
