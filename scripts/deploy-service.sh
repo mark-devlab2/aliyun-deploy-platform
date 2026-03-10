@@ -68,6 +68,8 @@ if [ ! -f "$DEPLOY_FILE" ]; then
 fi
 
 DEPLOY_JSON="$(python3 "$PLATFORM_DIR/scripts/render-config.py" deploy-contract "$DEPLOY_FILE")"
+DEPLOY_JSON_FILE="$(mktemp)"
+printf '%s' "$DEPLOY_JSON" >"$DEPLOY_JSON_FILE"
 RUNTIME_DIR="$PLATFORM_DIR/runtime/$SERVICE_ID"
 SERVICE_ENV_FILE="$RUNTIME_DIR/service.env"
 COMPOSE_ENV_FILE="$RUNTIME_DIR/compose.env"
@@ -90,47 +92,71 @@ if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
   printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >/dev/null
 fi
 
-PROJECT_NAME="$(printf '%s' "$DEPLOY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["projectName"])')"
-COMPOSE_FILE_REL="$(printf '%s' "$DEPLOY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["composeFile"])')"
-COMPOSE_FILE="$PLATFORM_DIR/$COMPOSE_FILE_REL"
-
-API_IMAGE_REPO="$(printf '%s' "$DEPLOY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["images"]["api"])')"
-ADMIN_WEB_IMAGE_REPO="$(printf '%s' "$DEPLOY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["images"]["admin-web"])')"
-PULL_SERVICES="$(printf '%s' "$DEPLOY_JSON" | python3 - "$TARGET" <<'PY'
+PROJECT_NAME="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
 import json
 import sys
 
-doc = json.load(sys.stdin)
-target = sys.argv[1]
+print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["projectName"])
+PY
+)"
+COMPOSE_FILE_REL="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["composeFile"])
+PY
+)"
+COMPOSE_FILE="$PLATFORM_DIR/$COMPOSE_FILE_REL"
+
+API_IMAGE_REPO="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["images"]["api"])
+PY
+)"
+ADMIN_WEB_IMAGE_REPO="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["images"]["admin-web"])
+PY
+)"
+PULL_SERVICES="$(python3 - "$DEPLOY_JSON_FILE" "$TARGET" <<'PY'
+import json
+import sys
+
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+target = sys.argv[2]
 services = doc["targets"][target]["pullServices"]
 print(" ".join(services))
 PY
 )"
-UP_SERVICES="$(printf '%s' "$DEPLOY_JSON" | python3 - "$TARGET" <<'PY'
+UP_SERVICES="$(python3 - "$DEPLOY_JSON_FILE" "$TARGET" <<'PY'
 import json
 import sys
 
-doc = json.load(sys.stdin)
-target = sys.argv[1]
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+target = sys.argv[2]
 services = doc["targets"][target]["upServices"]
 print(" ".join(services))
 PY
 )"
-RUN_PRISMA="$(printf '%s' "$DEPLOY_JSON" | python3 - "$TARGET" <<'PY'
+RUN_PRISMA="$(python3 - "$DEPLOY_JSON_FILE" "$TARGET" <<'PY'
 import json
 import sys
 
-doc = json.load(sys.stdin)
-target = sys.argv[1]
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+target = sys.argv[2]
 print("1" if doc["targets"][target].get("runPrisma") else "0")
 PY
 )"
-HEALTH_URLS="$(printf '%s' "$DEPLOY_JSON" | python3 - "$TARGET" <<'PY'
+HEALTH_URLS="$(python3 - "$DEPLOY_JSON_FILE" "$TARGET" <<'PY'
 import json
 import sys
 
-doc = json.load(sys.stdin)
-target = sys.argv[1]
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+target = sys.argv[2]
 for url in doc["targets"][target].get("healthChecks", []):
     print(url)
 PY
@@ -230,5 +256,7 @@ for path in (current_path, snapshot_path):
         json.dump(payload, fh, ensure_ascii=True, indent=2)
         fh.write("\n")
 PY
+
+rm -f "$DEPLOY_JSON_FILE"
 
 echo "SUMMARY service_id=$SERVICE_ID target=$TARGET image_tag=$IMAGE_TAG platform_commit=$PLATFORM_COMMIT"
