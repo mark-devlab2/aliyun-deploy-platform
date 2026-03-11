@@ -89,6 +89,8 @@ python3 scripts/init-aliyun-service.py adopt \
   --archetype node-api
 ```
 
+默认会生成并引用平台稳定线 `v1`，而不是直接跟随平台仓 `main`。
+
 默认规则：
 
 - `init` 默认不覆盖已有文件

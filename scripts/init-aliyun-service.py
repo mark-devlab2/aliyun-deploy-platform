@@ -433,7 +433,7 @@ def parse_args():
         subparser.add_argument("--registry-host", default="ghcr.io")
         subparser.add_argument("--registry-owner", default="mark-devlab2")
         subparser.add_argument("--platform-repo", default="mark-devlab2/aliyun-deploy-platform")
-        subparser.add_argument("--platform-ref", default="main")
+        subparser.add_argument("--platform-ref", default="v1")
         subparser.add_argument("--runtime-type", default="node")
         subparser.add_argument("--runtime-version", default="22")
         subparser.add_argument("--test-command", default="npm test")

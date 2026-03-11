@@ -6,7 +6,7 @@ REMOTE_USER="root"
 REMOTE_PORT="${REMOTE_PORT:-22}"
 REMOTE_PLATFORM_DIR="${REMOTE_PLATFORM_DIR:-/opt/aliyun-deploy-platform}"
 PLATFORM_GIT_URL="${PLATFORM_GIT_URL:-git@github.com:mark-devlab2/aliyun-deploy-platform.git}"
-PLATFORM_REF="${PLATFORM_REF:-main}"
+PLATFORM_REF="${PLATFORM_REF:-v1}"
 SERVICE_ID=""
 SSH_CONFIG_FILE="${SSH_CONFIG_FILE:-}"
 

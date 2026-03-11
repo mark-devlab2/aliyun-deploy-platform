@@ -79,7 +79,7 @@ GHCR_TOKEN='<ghcr-read-token>' \
   --remote-user '<aliyun-user>' \
   --platform-dir '/opt/aliyun-deploy-platform' \
   --platform-git-url 'git@github.com:mark-devlab2/aliyun-deploy-platform.git' \
-  --platform-ref 'main' \
+  --platform-ref 'v1' \
   --service-id 'feishu-token-service'
 ```
 
