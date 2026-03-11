@@ -38,12 +38,14 @@
 
 ## 目录
 
+- `.github/workflows/validate-service.yml`
 - `.github/workflows/build-publish.yml`
 - `.github/workflows/deploy-service.yml`
 - `docs/first-release-checklist.md`
 - `docs/service-onboarding.md`
 - `scripts/bootstrap-server.sh`
 - `scripts/deploy-service.sh`
+- `scripts/init-aliyun-service.py`
 - `scripts/rollback-service.sh`
 - `services/<service-id>/deploy.yaml`
 - `services/<service-id>/compose.prod.yml`
@@ -67,13 +69,39 @@
 - `REMOTE_PLATFORM_DIR`
 - `PLATFORM_REPO_TOKEN`
 
+## 统一入口
+
+优先使用统一入口生成或接管服务：
+
+```bash
+python3 scripts/init-aliyun-service.py init \
+  --service-id my-service \
+  --service-repo-dir /path/to/my-service \
+  --archetype node-api
+```
+
+如果是已有仓迁入标准：
+
+```bash
+python3 scripts/init-aliyun-service.py adopt \
+  --service-id my-service \
+  --service-repo-dir /path/to/my-service \
+  --archetype node-api
+```
+
+默认规则：
+
+- `init` 默认不覆盖已有文件
+- `adopt` 默认只补缺失文件
+- 只有显式 `--force` 才覆盖已有文件
+
 ## 服务接入步骤
 
-1. 服务仓新增 `.deploy/build.yaml`
-2. 服务仓新增 `.github/workflows/release.yml`
-3. 平台仓新增 `services/<service-id>/deploy.yaml`
-4. 平台仓新增 `services/<service-id>/compose.prod.yml`
-5. 服务器初始化平台仓并写入 `runtime/<service-id>/service.env`
+1. 运行 `scripts/init-aliyun-service.py init` 或 `adopt`
+2. 复核生成的 `.deploy/build.yaml` 和平台服务目录
+3. 补全业务专属 Dockerfile、测试命令和 `service.env`
+4. 配置 GitHub deploy secrets
+5. 合并后通过 `push main` 自动发布
 
 ## 首个样板
 

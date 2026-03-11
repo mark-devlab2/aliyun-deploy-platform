@@ -13,7 +13,7 @@ usage: rollback-service.sh --service-id <id> [options]
 options:
   --platform-dir <path>
   --service-id <id>
-  --target <api|admin-web|full>
+  --target <target>
   --image-tag <sha-...>
 EOF
 }

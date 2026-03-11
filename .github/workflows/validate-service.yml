@@ -1,0 +1,104 @@
+name: Validate Service
+
+on:
+  workflow_call:
+    inputs:
+      build_config_path:
+        required: true
+        type: string
+      platform_repo:
+        required: false
+        type: string
+        default: mark-devlab2/aliyun-deploy-platform
+      platform_ref:
+        required: false
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout service repository
+        uses: actions/checkout@v4
+
+      - name: Checkout deploy platform repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repo }}
+          ref: ${{ inputs.platform_ref }}
+          path: .deploy-platform
+          token: ${{ secrets.PLATFORM_REPO_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install service dependencies
+        run: npm ci
+
+      - name: Resolve contracts
+        run: |
+          python3 .deploy-platform/scripts/render-config.py build-contract "${{ inputs.build_config_path }}" > contract.json
+          SERVICE_ID="$(python3 - <<'PY'
+          import json
+
+          doc = json.load(open("contract.json", "r", encoding="utf-8"))
+          print(doc["serviceId"])
+          PY
+          )"
+          DEPLOY_FILE=".deploy-platform/services/$SERVICE_ID/deploy.yaml"
+          if [ ! -f "$DEPLOY_FILE" ]; then
+            echo "deploy contract missing in platform repo: $DEPLOY_FILE" >&2
+            exit 1
+          fi
+          python3 .deploy-platform/scripts/render-config.py deploy-contract "$DEPLOY_FILE" > deploy-contract.json
+
+      - name: Run tests
+        run: |
+          TEST_COMMAND="$(python3 - <<'PY'
+          import json
+
+          doc = json.load(open("contract.json", "r", encoding="utf-8"))
+          print(doc.get("test", {}).get("run", ""))
+          PY
+          )"
+          if [ -z "$TEST_COMMAND" ]; then
+            echo "test.run is required in .deploy/build.yaml" >&2
+            exit 1
+          fi
+          sh -lc "$TEST_COMMAND"
+
+      - name: Validate compose rendering
+        run: |
+          python3 - <<'PY' > compose-images.env
+          import json
+          import re
+
+          deploy = json.load(open("deploy-contract.json", "r", encoding="utf-8"))
+          for name, repository in deploy["images"].items():
+              env_name = re.sub(r"[^A-Z0-9]+", "_", name.upper()) + "_IMAGE"
+              print(f"{env_name}={repository}:sha-validation")
+          PY
+          SERVICE_ID="$(python3 - <<'PY'
+          import json
+
+          deploy = json.load(open("deploy-contract.json", "r", encoding="utf-8"))
+          print(deploy["serviceId"])
+          PY
+          )"
+          PLATFORM_DIR="$PWD/.deploy-platform"
+          RUNTIME_DIR="$PLATFORM_DIR/runtime/$SERVICE_ID"
+          mkdir -p "$RUNTIME_DIR"
+          cp "$PLATFORM_DIR/services/$SERVICE_ID/compose.prod.env.example" "$RUNTIME_DIR/service.env"
+          cat compose-images.env >> "$RUNTIME_DIR/service.env"
+          docker compose \
+            --project-name validation \
+            --env-file "$RUNTIME_DIR/service.env" \
+            -f "$PLATFORM_DIR/services/$SERVICE_ID/compose.prod.yml" \
+            config >/dev/null

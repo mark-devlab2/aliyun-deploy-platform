@@ -61,6 +61,15 @@ if [ -z "$SERVICE_ID" ] || [ -z "$TARGET" ] || [ -z "$IMAGE_TAG" ]; then
   exit 1
 fi
 
+case "$IMAGE_TAG" in
+  sha-*)
+    ;;
+  *)
+    echo "image tag must use sha-* format: $IMAGE_TAG" >&2
+    exit 1
+    ;;
+esac
+
 DEPLOY_FILE="$PLATFORM_DIR/services/$SERVICE_ID/deploy.yaml"
 if [ ! -f "$DEPLOY_FILE" ]; then
   echo "deploy contract not found: $DEPLOY_FILE" >&2
@@ -107,19 +116,26 @@ print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["composeFile"])
 PY
 )"
 COMPOSE_FILE="$PLATFORM_DIR/$COMPOSE_FILE_REL"
-
-API_IMAGE_REPO="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
+IMAGE_ENV_LINES="$(python3 - "$DEPLOY_JSON_FILE" "$IMAGE_TAG" <<'PY'
 import json
+import re
 import sys
 
-print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["images"]["api"])
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+tag = sys.argv[2]
+for name, repository in doc["images"].items():
+    env_name = re.sub(r"[^A-Z0-9]+", "_", name.upper()) + "_IMAGE"
+    print(f"{env_name}={repository}:{tag}")
 PY
 )"
-ADMIN_WEB_IMAGE_REPO="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
+IMAGE_SNAPSHOT_JSON="$(python3 - "$DEPLOY_JSON_FILE" "$IMAGE_TAG" <<'PY'
 import json
 import sys
 
-print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["images"]["admin-web"])
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+tag = sys.argv[2]
+images = {name: f"{repository}:{tag}" for name, repository in doc["images"].items()}
+print(json.dumps(images, ensure_ascii=True, separators=(",", ":")))
 PY
 )"
 PULL_SERVICES="$(python3 - "$DEPLOY_JSON_FILE" "$TARGET" <<'PY'
@@ -163,10 +179,8 @@ PY
 )"
 
 cat "$SERVICE_ENV_FILE" >"$COMPOSE_ENV_FILE"
-{
-  printf '\nAPI_IMAGE=%s:%s\n' "$API_IMAGE_REPO" "$IMAGE_TAG"
-  printf 'ADMIN_WEB_IMAGE=%s:%s\n' "$ADMIN_WEB_IMAGE_REPO" "$IMAGE_TAG"
-} >>"$COMPOSE_ENV_FILE"
+printf '\n' >>"$COMPOSE_ENV_FILE"
+printf '%s\n' "$IMAGE_ENV_LINES" >>"$COMPOSE_ENV_FILE"
 
 compose_cmd() {
   docker compose -p "$PROJECT_NAME" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
@@ -233,7 +247,7 @@ DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 PLATFORM_COMMIT="$(git -C "$PLATFORM_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 SNAPSHOT_FILE="$RELEASE_DIR/$(date -u +%Y%m%dT%H%M%SZ)-$IMAGE_TAG.json"
 
-python3 - "$CURRENT_RELEASE_FILE" "$SNAPSHOT_FILE" "$DEPLOYED_AT" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$API_IMAGE_REPO:$IMAGE_TAG" "$ADMIN_WEB_IMAGE_REPO:$IMAGE_TAG" "$PLATFORM_COMMIT" <<'PY'
+python3 - "$CURRENT_RELEASE_FILE" "$SNAPSHOT_FILE" "$DEPLOYED_AT" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" <<'PY'
 import json
 import sys
 
@@ -244,11 +258,8 @@ payload = {
     "serviceId": sys.argv[4],
     "target": sys.argv[5],
     "imageTag": sys.argv[6],
-    "images": {
-        "api": sys.argv[7],
-        "admin-web": sys.argv[8],
-    },
-    "platformCommit": sys.argv[9],
+    "images": json.loads(sys.argv[7]),
+    "platformCommit": sys.argv[8],
 }
 
 for path in (current_path, snapshot_path):
