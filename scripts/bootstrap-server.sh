@@ -5,7 +5,7 @@ REMOTE_HOST=""
 REMOTE_USER="root"
 REMOTE_PORT="${REMOTE_PORT:-22}"
 REMOTE_PLATFORM_DIR="${REMOTE_PLATFORM_DIR:-/opt/aliyun-deploy-platform}"
-PLATFORM_GIT_URL="${PLATFORM_GIT_URL:-git@github.com:mark-devlab2/aliyun-deploy-platform.git}"
+PLATFORM_GIT_URL="${PLATFORM_GIT_URL:-https://github.com/mark-devlab2/aliyun-deploy-platform.git}"
 PLATFORM_REF="${PLATFORM_REF:-v1}"
 SERVICE_ID=""
 SSH_CONFIG_FILE="${SSH_CONFIG_FILE:-}"
@@ -80,18 +80,13 @@ if [ -z "$REMOTE_HOST" ]; then
   exit 1
 fi
 
-GHCR_USERNAME_B64="$(printf '%s' "${GHCR_USERNAME:-}" | base64 | tr -d '\n')"
-GHCR_TOKEN_B64="$(printf '%s' "${GHCR_TOKEN:-}" | base64 | tr -d '\n')"
-
-ssh_run "$REMOTE_USER@$REMOTE_HOST" "bash -s -- '$REMOTE_PLATFORM_DIR' '$PLATFORM_GIT_URL' '$PLATFORM_REF' '$SERVICE_ID' '$GHCR_USERNAME_B64' '$GHCR_TOKEN_B64'" <<'REMOTE'
+ssh_run "$REMOTE_USER@$REMOTE_HOST" "bash -s -- '$REMOTE_PLATFORM_DIR' '$PLATFORM_GIT_URL' '$PLATFORM_REF' '$SERVICE_ID'" <<'REMOTE'
 set -eu
 
 PLATFORM_DIR="$1"
 PLATFORM_GIT_URL="$2"
 PLATFORM_REF="$3"
 SERVICE_ID="$4"
-GHCR_USERNAME_B64="$5"
-GHCR_TOKEN_B64="$6"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -138,14 +133,6 @@ if [ ! -d "$PLATFORM_DIR/.git" ]; then
 else
   git -C "$PLATFORM_DIR" remote set-url origin "$PLATFORM_GIT_URL"
   checkout_platform_ref "$PLATFORM_DIR" "$PLATFORM_REF"
-fi
-
-if [ -n "$GHCR_USERNAME_B64" ] && [ -n "$GHCR_TOKEN_B64" ]; then
-  ghcr_username="$(printf '%s' "$GHCR_USERNAME_B64" | base64 -d)"
-  ghcr_token="$(printf '%s' "$GHCR_TOKEN_B64" | base64 -d)"
-  if [ -n "$ghcr_username" ] && [ -n "$ghcr_token" ]; then
-    printf '%s' "$ghcr_token" | docker login ghcr.io -u "$ghcr_username" --password-stdin >/dev/null
-  fi
 fi
 
 if [ -n "$SERVICE_ID" ]; then

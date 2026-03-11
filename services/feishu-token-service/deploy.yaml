@@ -3,9 +3,16 @@
   "projectName": "feishu-token-service",
   "composeFile": "services/feishu-token-service/compose.prod.yml",
   "runtimeDir": "runtime/feishu-token-service",
+  "productionRegistry": "ghcr",
   "images": {
-    "api": "ghcr.io/mark-devlab2/feishu-token-service-api",
-    "admin-web": "ghcr.io/mark-devlab2/feishu-token-service-admin-web"
+    "api": {
+      "acr": "registry.cn-beijing.aliyuncs.com/mark-devlab2/feishu-token-service-api",
+      "ghcr": "ghcr.io/mark-devlab2/feishu-token-service-api"
+    },
+    "admin-web": {
+      "acr": "registry.cn-beijing.aliyuncs.com/mark-devlab2/feishu-token-service-admin-web",
+      "ghcr": "ghcr.io/mark-devlab2/feishu-token-service-admin-web"
+    }
   },
   "targets": {
     "api": {

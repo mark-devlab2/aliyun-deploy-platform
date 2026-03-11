@@ -23,6 +23,7 @@ def main() -> int:
     print(f"- Target: `{doc.get('target', 'unknown')}`")
     print(f"- Image tag: `{doc.get('imageTag', 'unknown')}`")
     print(f"- Platform commit: `{doc.get('platformCommit', 'unknown')}`")
+    print(f"- Production registry: `{doc.get('productionRegistry', 'unknown')}`")
     print(f"- Last step: `{doc.get('lastStep', 'unknown')}`")
     print(f"- Started at: `{doc.get('startedAt', 'unknown')}`")
     print(f"- Ended at: `{doc.get('endedAt', 'unknown')}`")
