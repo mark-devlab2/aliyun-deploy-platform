@@ -19,7 +19,7 @@ on:
       platform_ref:
         required: false
         type: string
-        default: main
+        default: v1
       remote_platform_dir:
         required: false
         type: string

@@ -29,6 +29,8 @@ python3 scripts/init-aliyun-service.py adopt \
 
 `init` 默认不覆盖，`adopt` 默认只补缺失；只有 `--force` 才覆盖已有文件。
 
+默认生成的 workflow 会引用平台稳定线 `@v1`，而不是直接引用 `@main`。
+
 ## 1. 服务仓必须提供
 
 - `.deploy/build.yaml`
