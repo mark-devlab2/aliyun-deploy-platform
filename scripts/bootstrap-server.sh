@@ -104,18 +104,37 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+run_with_retry() {
+  max_attempts="${BOOTSTRAP_RETRY_ATTEMPTS:-3}"
+  delay_seconds="${BOOTSTRAP_RETRY_DELAY_SECONDS:-5}"
+  attempt=1
+
+  while :; do
+    if "$@"; then
+      return 0
+    fi
+    status=$?
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      return "$status"
+    fi
+    echo "bootstrap retry $attempt/$max_attempts: $*" >&2
+    sleep "$delay_seconds"
+    attempt=$((attempt + 1))
+  done
+}
+
 checkout_platform_ref() {
   repo_dir="$1"
   platform_ref="$2"
 
-  if git -C "$repo_dir" ls-remote --exit-code --heads origin "$platform_ref" >/dev/null 2>&1; then
-    git -C "$repo_dir" fetch origin "refs/heads/$platform_ref:refs/remotes/origin/$platform_ref"
+  if run_with_retry git -C "$repo_dir" ls-remote --exit-code --heads origin "$platform_ref" >/dev/null 2>&1; then
+    run_with_retry git -C "$repo_dir" fetch origin "refs/heads/$platform_ref:refs/remotes/origin/$platform_ref"
     git -C "$repo_dir" checkout -B "$platform_ref" "refs/remotes/origin/$platform_ref"
     return 0
   fi
 
-  if git -C "$repo_dir" ls-remote --exit-code --tags origin "refs/tags/$platform_ref" >/dev/null 2>&1; then
-    git -C "$repo_dir" fetch origin "refs/tags/$platform_ref:refs/tags/$platform_ref"
+  if run_with_retry git -C "$repo_dir" ls-remote --exit-code --tags origin "refs/tags/$platform_ref" >/dev/null 2>&1; then
+    run_with_retry git -C "$repo_dir" fetch origin "refs/tags/$platform_ref:refs/tags/$platform_ref"
     git -C "$repo_dir" checkout --detach "refs/tags/$platform_ref"
     return 0
   fi
@@ -128,7 +147,10 @@ platform_parent="$(dirname "$PLATFORM_DIR")"
 mkdir -p "$platform_parent"
 
 if [ ! -d "$PLATFORM_DIR/.git" ]; then
-  git clone "$PLATFORM_GIT_URL" "$PLATFORM_DIR"
+  temp_dir="${PLATFORM_DIR}.tmp.$$"
+  rm -rf "$temp_dir"
+  run_with_retry git clone "$PLATFORM_GIT_URL" "$temp_dir"
+  mv "$temp_dir" "$PLATFORM_DIR"
   checkout_platform_ref "$PLATFORM_DIR" "$PLATFORM_REF"
 else
   git -C "$PLATFORM_DIR" remote set-url origin "$PLATFORM_GIT_URL"

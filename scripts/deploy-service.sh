@@ -306,6 +306,19 @@ compose_cmd() {
   docker compose -p "$PROJECT_NAME" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+cleanup_stale_recreate_containers() {
+  docker ps -a --filter "label=com.docker.compose.project=$PROJECT_NAME" --format '{{.Names}}' |
+    while IFS= read -r name; do
+      [ -n "$name" ] || continue
+      case "$name" in
+        *_"$PROJECT_NAME"-*)
+          echo "CLEANUP stale recreate container=$name"
+          docker rm -f "$name" >/dev/null 2>&1 || true
+          ;;
+      esac
+    done
+}
+
 run_health_checks() {
   if [ -z "$HEALTH_URLS" ]; then
     return 0
@@ -353,6 +366,7 @@ echo "MILESTONE pull completed duration_seconds=$PULL_DURATION_SECONDS"
 
 CURRENT_STEP="restart_services"
 step_started_epoch="$(date +%s)"
+cleanup_stale_recreate_containers
 compose_cmd up -d $UP_SERVICES
 UP_DURATION_SECONDS=$(( $(date +%s) - step_started_epoch ))
 echo "MILESTONE services restarted duration_seconds=$UP_DURATION_SECONDS"
