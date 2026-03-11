@@ -320,7 +320,6 @@ def render_release_workflow(args) -> str:
 
         permissions:
           contents: read
-          packages: write
 
         jobs:
           build_publish:

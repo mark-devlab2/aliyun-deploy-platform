@@ -44,13 +44,16 @@ git push -u origin main
 - `ALIYUN_SSH_KNOWN_HOSTS`
 - `PLATFORM_GIT_URL`
 - `REMOTE_PLATFORM_DIR`
+- `GHCR_PUSH_USERNAME`
+- `GHCR_PUSH_TOKEN`
 - `GHCR_PULL_USERNAME`
 - `GHCR_PULL_TOKEN`
 
 建议：
 
-- `PLATFORM_REPO_TOKEN` 只在平台仓仍是私有仓时提供，并至少给 `contents:read`
-- `GHCR_PULL_TOKEN` 只在需要 GHCR 兼容镜像源时保留，并至少给 `packages:read`
+- 平台仓默认公开，通常不再需要 `PLATFORM_REPO_TOKEN`
+- `GHCR_PUSH_TOKEN` 只在需要 GHCR 兼容构建输出时保留，并至少给 `packages:write`
+- `GHCR_PULL_TOKEN` 只在需要 GHCR 作为生产镜像源时保留，并至少给 `packages:read`
 
 ## 4. 初始化服务器
 
@@ -120,7 +123,7 @@ services/feishu-token-service/compose.prod.env.example
 1. 向 `main` push 一次可控变更
 2. 观察 `Release To Aliyun` workflow
 3. 确认镜像标签为 `sha-<gitsha>`
-4. 确认镜像源为 ACR；如果当前仍处于 GHCR 兼容阶段，先不要删除 GHCR 相关 secrets
+4. 确认镜像源为 ACR；默认可以不配置任何 `GHCR_*` secrets
 
 如需手动触发：
 

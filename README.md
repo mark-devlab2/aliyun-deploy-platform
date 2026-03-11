@@ -33,7 +33,7 @@
 
 ## 命名规范
 
-- 镜像：`registry.cn-beijing.aliyuncs.com/mark-devlab2/<service-id>-<image-name>`
+- 镜像：`<registry-host>/<namespace>/<service-id>-<image-name>`
 - 生产标签：`sha-<gitsha>`
 - 滚动标签：`main`
 - 不使用 `latest`
@@ -69,8 +69,16 @@
 - `ALIYUN_SSH_KNOWN_HOSTS`
 - `PLATFORM_GIT_URL`
 - `REMOTE_PLATFORM_DIR`
+- `GHCR_PUSH_USERNAME`
+- `GHCR_PUSH_TOKEN`
 - `GHCR_PULL_USERNAME`
 - `GHCR_PULL_TOKEN`
+
+说明：
+
+- 默认 ACR-only 服务不需要任何 `GHCR_*` secrets
+- 只有启用 GHCR 兼容构建输出时才需要 `GHCR_PUSH_*`
+- 只有把 `productionRegistry` 设为 `ghcr` 时才需要 `GHCR_PULL_*`
 
 ## 统一入口
 
@@ -120,7 +128,7 @@ python3 scripts/init-aliyun-service.py adopt \
 
 其中 `api/full` 会在部署后执行 `docker compose exec -T api npx prisma db push`。
 
-当前 `feishu-token-service` 为了兼容已上线的 GHCR 发布链路，仍保留 GHCR 生产配置；平台侧已经具备 ACR-first 能力，待配置 ACR 账号后可把 `productionRegistry` 切到 `acr`。
+当前 `feishu-token-service` 已切到 `ACR` 生产主路径，`GHCR` 只保留为可选兼容能力，不再是默认构建或默认拉取来源。
 
 ## 文档
 
