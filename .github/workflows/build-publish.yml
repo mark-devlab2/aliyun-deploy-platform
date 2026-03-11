@@ -39,10 +39,10 @@ jobs:
       deploy_target: ${{ steps.target.outputs.deploy_target }}
     steps:
       - name: Checkout service repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Checkout deploy platform repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ inputs.platform_repo }}
           ref: ${{ inputs.platform_ref }}
@@ -50,7 +50,7 @@ jobs:
           token: ${{ secrets.PLATFORM_REPO_TOKEN || github.token }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -88,7 +88,7 @@ jobs:
           sh -lc "$TEST_COMMAND"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to enabled registries
         env:
