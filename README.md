@@ -18,6 +18,7 @@
   - 平台仓
   - 运行时 env
   - release state
+  - deploy attempt state
   - 镜像 pull 与容器重启
 
 ## 标准流程
@@ -28,6 +29,7 @@
 4. GitHub Actions 通过 SSH 触发服务器部署
 5. 服务器 pull `sha-*` 镜像并重启容器
 6. 服务器执行健康检查并记录回滚元数据
+7. GitHub Actions 输出本次 deploy attempt 摘要
 
 ## 命名规范
 
