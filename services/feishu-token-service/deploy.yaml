@@ -3,7 +3,7 @@
   "projectName": "feishu-token-service",
   "composeFile": "services/feishu-token-service/compose.prod.yml",
   "runtimeDir": "runtime/feishu-token-service",
-  "productionRegistry": "ghcr",
+  "productionRegistry": "acr",
   "images": {
     "api": {
       "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/feishu-token-service-api",
