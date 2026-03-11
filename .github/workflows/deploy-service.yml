@@ -61,13 +61,11 @@ jobs:
 
       - name: Bootstrap remote platform repository
         env:
-          GHCR_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           PLATFORM_GIT_URL: ${{ secrets.PLATFORM_GIT_URL }}
           REMOTE_PORT: ${{ secrets.ALIYUN_SSH_PORT }}
         run: |
           if [ -z "${PLATFORM_GIT_URL:-}" ]; then
-            PLATFORM_GIT_URL="git@github.com:${{ inputs.platform_repo }}.git"
+            PLATFORM_GIT_URL="https://github.com/${{ inputs.platform_repo }}.git"
           fi
           ./.deploy-platform/scripts/bootstrap-server.sh \
             --remote-host "${{ secrets.ALIYUN_HOST }}" \
@@ -83,21 +81,32 @@ jobs:
           ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
           ALIYUN_SSH_USER: ${{ secrets.ALIYUN_SSH_USER }}
           ALIYUN_SSH_PORT: ${{ secrets.ALIYUN_SSH_PORT }}
-          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          GHCR_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
-          GHCR_USERNAME_B64="$(printf '%s' "$GHCR_PULL_USERNAME" | base64 | tr -d '\n')"
-          GHCR_TOKEN_B64="$(printf '%s' "$GHCR_PULL_TOKEN" | base64 | tr -d '\n')"
+          ACR_USERNAME_B64="$(printf '%s' "$ACR_USERNAME" | base64 | tr -d '\n')"
+          ACR_PASSWORD_B64="$(printf '%s' "$ACR_PASSWORD" | base64 | tr -d '\n')"
+          GHCR_USERNAME_B64="$(printf '%s' "$GHCR_USERNAME" | base64 | tr -d '\n')"
+          GHCR_TOKEN_B64="$(printf '%s' "$GHCR_TOKEN" | base64 | tr -d '\n')"
           REMOTE_PORT="${ALIYUN_SSH_PORT:-22}"
           ssh -p "$REMOTE_PORT" -o ConnectTimeout=10 "$ALIYUN_SSH_USER@$ALIYUN_HOST" \
-            "bash -s -- '${{ inputs.remote_platform_dir }}' '${{ inputs.service_id }}' '${{ inputs.target }}' '${{ inputs.image_tag }}' '$GHCR_USERNAME_B64' '$GHCR_TOKEN_B64'" <<'REMOTE'
+            "bash -s -- '${{ inputs.remote_platform_dir }}' '${{ inputs.service_id }}' '${{ inputs.target }}' '${{ inputs.image_tag }}' '$ACR_USERNAME_B64' '$ACR_PASSWORD_B64' '$GHCR_USERNAME_B64' '$GHCR_TOKEN_B64'" <<'REMOTE'
           set -eu
           PLATFORM_DIR="$1"
           SERVICE_ID="$2"
           TARGET="$3"
           IMAGE_TAG="$4"
-          GHCR_USERNAME_B64="$5"
-          GHCR_TOKEN_B64="$6"
+          ACR_USERNAME_B64="$5"
+          ACR_PASSWORD_B64="$6"
+          GHCR_USERNAME_B64="$7"
+          GHCR_TOKEN_B64="$8"
+
+          if [ -n "$ACR_USERNAME_B64" ] && [ -n "$ACR_PASSWORD_B64" ]; then
+            export ACR_USERNAME="$(printf '%s' "$ACR_USERNAME_B64" | base64 -d)"
+            export ACR_PASSWORD="$(printf '%s' "$ACR_PASSWORD_B64" | base64 -d)"
+          fi
 
           if [ -n "$GHCR_USERNAME_B64" ] && [ -n "$GHCR_TOKEN_B64" ]; then
             export GHCR_USERNAME="$(printf '%s' "$GHCR_USERNAME_B64" | base64 -d)"

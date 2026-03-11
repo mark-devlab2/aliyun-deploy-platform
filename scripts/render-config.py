@@ -14,17 +14,64 @@ def load_json_yaml(path_str: str) -> dict:
         raise SystemExit(f"invalid JSON/YAML document in {path}: {exc}") from exc
 
 
+def normalize_registry_name(host: str) -> str:
+    if host == "ghcr.io":
+        return "ghcr"
+    if host.endswith(".aliyuncs.com"):
+        return "acr"
+    return "default"
+
+
+def normalize_registry_map(doc: dict) -> tuple[dict, str]:
+    registries = {}
+
+    if "registries" in doc:
+        for name, config in doc.get("registries", {}).items():
+            host = config.get("host", "").strip()
+            namespace = config.get("namespace", config.get("owner", "")).strip()
+            enabled = bool(config.get("enabled", True))
+            if not host or not namespace:
+                raise SystemExit(f"invalid registry entry: {name}")
+            registries[name] = {
+                "host": host,
+                "namespace": namespace,
+                "enabled": enabled,
+            }
+    else:
+        registry = doc.get("registry", {})
+        host = registry.get("host", "ghcr.io").strip()
+        namespace = registry.get("namespace", registry.get("owner", "")).strip()
+        if not namespace:
+            raise SystemExit("build contract missing registry.owner or registry.namespace")
+        default_name = normalize_registry_name(host)
+        registries[default_name] = {
+            "host": host,
+            "namespace": namespace,
+            "enabled": True,
+        }
+
+    enabled_names = [name for name, config in registries.items() if config["enabled"]]
+    if not enabled_names:
+        raise SystemExit("at least one registry must be enabled")
+
+    production_registry = (
+        doc.get("deploy", {}).get("productionRegistry", "").strip()
+        or doc.get("productionRegistry", "").strip()
+        or enabled_names[0]
+    )
+    if production_registry not in registries:
+        raise SystemExit(f"production registry not declared: {production_registry}")
+
+    return registries, production_registry
+
+
 def normalize_build_contract(doc: dict) -> dict:
     service_id = doc.get("serviceId", "").strip()
-    registry = doc.get("registry", {})
-    host = registry.get("host", "ghcr.io").strip()
-    owner = registry.get("owner", "").strip()
+    registries, production_registry = normalize_registry_map(doc)
     images = []
 
     if not service_id:
         raise SystemExit("build contract missing serviceId")
-    if not owner:
-        raise SystemExit("build contract missing registry.owner")
 
     for image in doc.get("images", []):
         name = image.get("name", "").strip()
@@ -33,21 +80,31 @@ def normalize_build_contract(doc: dict) -> dict:
         dockerfile = image.get("dockerfile", "").strip()
         if not name or not image_name or not context or not dockerfile:
             raise SystemExit(f"invalid image entry in build contract: {image}")
+        repositories = {}
+        for registry_name, config in registries.items():
+            if not config["enabled"]:
+                continue
+            repositories[registry_name] = (
+                f"{config['host']}/{config['namespace']}/{image_name}"
+            )
         images.append(
             {
                 "name": name,
                 "image": image_name,
                 "context": context,
                 "dockerfile": dockerfile,
-                "repository": f"{host}/{owner}/{image_name}",
+                "repositories": repositories,
             }
         )
 
     return {
         "serviceId": service_id,
         "test": doc.get("test", {}),
-        "deploy": doc.get("deploy", {}),
-        "registry": {"host": host, "owner": owner},
+        "deploy": {
+            **doc.get("deploy", {}),
+            "productionRegistry": production_registry,
+        },
+        "registries": registries,
         "images": images,
     }
 
@@ -63,7 +120,38 @@ def normalize_deploy_contract(doc: dict) -> dict:
         raise SystemExit("deploy contract missing required keys")
     if not images or not targets:
         raise SystemExit("deploy contract missing images or targets")
-    return doc
+
+    normalized_images = {}
+    for image_name, value in images.items():
+        if isinstance(value, str):
+            normalized_images[image_name] = {normalize_registry_name(value.split("/", 1)[0]): value}
+            continue
+        if isinstance(value, dict):
+            normalized = {}
+            for registry_name, repository in value.items():
+                if not isinstance(repository, str) or not repository.strip():
+                    raise SystemExit(f"invalid repository entry for image {image_name}: {value}")
+                normalized[registry_name] = repository.strip()
+            normalized_images[image_name] = normalized
+            continue
+        raise SystemExit(f"invalid image mapping for {image_name}: {value}")
+
+    production_registry = doc.get("productionRegistry", "").strip()
+    if not production_registry:
+        first_image = next(iter(normalized_images.values()))
+        production_registry = next(iter(first_image.keys()))
+
+    for image_name, registry_map in normalized_images.items():
+        if production_registry not in registry_map:
+            raise SystemExit(
+                f"production registry {production_registry} missing for image {image_name}"
+            )
+
+    return {
+        **doc,
+        "images": normalized_images,
+        "productionRegistry": production_registry,
+    }
 
 
 def main() -> None:
