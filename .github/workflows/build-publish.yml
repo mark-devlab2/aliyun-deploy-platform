@@ -96,7 +96,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-        run: ./.deploy-platform/scripts/login-registries.sh contract.json
+        run: sh ./.deploy-platform/scripts/login-registries.sh contract.json
 
       - name: Build and publish images
         id: build
