@@ -16,7 +16,7 @@ usage: deploy-service.sh --service-id <id> --target <target> --image-tag <sha-..
 options:
   --platform-dir <path>
   --service-id <id>
-  --target <api|admin-web|full>
+  --target <target>
   --image-tag <sha-...>
   --skip-health
 EOF
@@ -297,6 +297,19 @@ for url in doc["targets"][target].get("healthChecks", []):
     print(url)
 PY
 )"
+TCP_HEALTH_CHECKS="$(python3 - "$DEPLOY_JSON_FILE" "$TARGET" <<'PY'
+import json
+import sys
+
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+target = sys.argv[2]
+checks = doc["targets"][target].get("tcpHealthChecks")
+if checks is None:
+    checks = doc.get("tcpHealthChecks", [])
+for value in checks:
+    print(value)
+PY
+)"
 
 cat "$SERVICE_ENV_FILE" >"$COMPOSE_ENV_FILE"
 printf '\n' >>"$COMPOSE_ENV_FILE"
@@ -320,7 +333,7 @@ cleanup_stale_recreate_containers() {
 }
 
 run_health_checks() {
-  if [ -z "$HEALTH_URLS" ]; then
+  if [ -z "$HEALTH_URLS" ] && [ -z "$TCP_HEALTH_CHECKS" ]; then
     return 0
   fi
 
@@ -341,6 +354,34 @@ run_health_checks() {
     done <<EOF
 $HEALTH_URLS
 EOF
+
+    if [ "$passed" -eq 1 ] && [ -n "$TCP_HEALTH_CHECKS" ]; then
+      if ! TCP_HEALTH_CHECKS="$TCP_HEALTH_CHECKS" python3 - <<'PY'
+import os
+import socket
+import sys
+
+checks = [line.strip() for line in os.environ.get("TCP_HEALTH_CHECKS", "").splitlines() if line.strip()]
+for check in checks:
+    if ":" not in check:
+        print(f"invalid tcp health check target: {check}", file=sys.stderr)
+        sys.exit(1)
+    host, port_text = check.rsplit(":", 1)
+    try:
+        port = int(port_text)
+    except ValueError:
+        print(f"invalid tcp health check port: {check}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        with socket.create_connection((host, port), timeout=5):
+            pass
+    except OSError:
+        sys.exit(1)
+PY
+      then
+        passed=0
+      fi
+    fi
 
     if [ "$passed" -eq 1 ]; then
       echo "MILESTONE health checks passed attempt=$attempt"

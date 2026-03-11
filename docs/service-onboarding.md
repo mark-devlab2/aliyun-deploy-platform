@@ -40,6 +40,7 @@ python3 scripts/init-aliyun-service.py adopt \
 `build.yaml` 至少要定义：
 
 - `serviceId`
+- `runtime.type`
 - `registries`
 - `deploy.productionRegistry`
 - `test.run`
@@ -69,8 +70,18 @@ python3 scripts/init-aliyun-service.py adopt \
 - `upServices`
 - `runPrisma`
 - `healthChecks`
+- `tcpHealthChecks`（非 HTTP 服务）
 
 不要把这些规则散落到每个服务仓自己的脚本里。
+
+约定：
+
+- `runtime.type=node`
+  - 走 `setup-node + npm ci + test.run`
+- `runtime.type=container-mirror`
+  - 跳过 Node 安装
+  - 直接执行 `test.run`
+  - 进入 Buildx 构建和推送
 
 ## 4. 镜像命名约定
 
@@ -121,7 +132,7 @@ registry.cn-beijing.aliyuncs.com/mark-devlab2/<service-id>-<image-name>
 - 是否需要多镜像发布
 - 是否需要数据库迁移或 Prisma 同步
 - 哪些目标需要连带重启代理容器
-- 健康检查 URL 是什么
+- 健康检查是 HTTP URL 还是 TCP 端口
 - 服务器上的持久化卷是否需要兼容旧名字
 
 ## 7. 样板参考
@@ -131,6 +142,12 @@ registry.cn-beijing.aliyuncs.com/mark-devlab2/<service-id>-<image-name>
 - `services/feishu-token-service/deploy.yaml`
 - `services/feishu-token-service/compose.prod.yml`
 - `feishu-token-service/.deploy/build.yaml`
+
+非 Node / TCP 服务样板：
+
+- `services/rustdesk-server/deploy.yaml`
+- `services/rustdesk-server/compose.prod.yml`
+- `rustdesk-server/.deploy/build.yaml`
 
 优先复制样板，再做最小化改动，不要重新发明一套发布规则。
 

@@ -4,6 +4,22 @@ import sys
 from pathlib import Path
 
 
+def validate_tcp_health_check(value: str, *, field_name: str) -> str:
+    candidate = value.strip()
+    if ":" not in candidate:
+        raise SystemExit(f"{field_name} must use host:port format: {value!r}")
+    host, port_text = candidate.rsplit(":", 1)
+    if not host:
+        raise SystemExit(f"{field_name} host is required: {value!r}")
+    try:
+        port = int(port_text)
+    except ValueError as exc:
+        raise SystemExit(f"{field_name} port must be an integer: {value!r}") from exc
+    if port < 1 or port > 65535:
+        raise SystemExit(f"{field_name} port out of range: {value!r}")
+    return candidate
+
+
 def load_json_yaml(path_str: str) -> dict:
     path = Path(path_str)
     try:
@@ -69,6 +85,12 @@ def normalize_build_contract(doc: dict) -> dict:
     service_id = doc.get("serviceId", "").strip()
     registries, production_registry = normalize_registry_map(doc)
     images = []
+    runtime = doc.get("runtime", {})
+    if not isinstance(runtime, dict):
+        raise SystemExit("build contract runtime must be an object")
+    runtime_type = str(runtime.get("type", "node")).strip() or "node"
+    if runtime_type not in {"node", "container-mirror"}:
+        raise SystemExit(f"unsupported runtime.type: {runtime_type}")
 
     if not service_id:
         raise SystemExit("build contract missing serviceId")
@@ -99,6 +121,10 @@ def normalize_build_contract(doc: dict) -> dict:
 
     return {
         "serviceId": service_id,
+        "runtime": {
+            **runtime,
+            "type": runtime_type,
+        },
         "test": doc.get("test", {}),
         "deploy": {
             **doc.get("deploy", {}),
@@ -116,10 +142,34 @@ def normalize_deploy_contract(doc: dict) -> dict:
     runtime_dir = doc.get("runtimeDir", "").strip()
     images = doc.get("images", {})
     targets = doc.get("targets", {})
+    tcp_health_checks = doc.get("tcpHealthChecks", [])
     if not service_id or not project_name or not compose_file or not runtime_dir:
         raise SystemExit("deploy contract missing required keys")
     if not images or not targets:
         raise SystemExit("deploy contract missing images or targets")
+    if not isinstance(tcp_health_checks, list):
+        raise SystemExit("deploy contract tcpHealthChecks must be a list")
+    normalized_tcp_health_checks = []
+    for value in tcp_health_checks:
+        if not isinstance(value, str) or not value.strip():
+            raise SystemExit(f"invalid tcpHealthChecks entry: {value!r}")
+        normalized_tcp_health_checks.append(
+            validate_tcp_health_check(value, field_name="tcpHealthChecks")
+        )
+    for target_name, target_doc in targets.items():
+        target_tcp_health_checks = target_doc.get("tcpHealthChecks")
+        if target_tcp_health_checks is None:
+            continue
+        if not isinstance(target_tcp_health_checks, list):
+            raise SystemExit(f"deploy target tcpHealthChecks must be a list: {target_name}")
+        for value in target_tcp_health_checks:
+            if not isinstance(value, str) or not value.strip():
+                raise SystemExit(
+                    f"invalid deploy target tcpHealthChecks entry for {target_name}: {value!r}"
+                )
+            validate_tcp_health_check(
+                value, field_name=f"targets.{target_name}.tcpHealthChecks"
+            )
 
     normalized_images = {}
     for image_name, value in images.items():
@@ -151,6 +201,7 @@ def normalize_deploy_contract(doc: dict) -> dict:
         **doc,
         "images": normalized_images,
         "productionRegistry": production_registry,
+        "tcpHealthChecks": normalized_tcp_health_checks,
     }
 
 

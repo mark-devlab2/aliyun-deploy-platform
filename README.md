@@ -33,7 +33,7 @@
 
 ## 命名规范
 
-- 镜像：`<registry-host>/<namespace>/<service-id>-<image-name>`
+- 镜像：`registry.cn-beijing.aliyuncs.com/mark-devlab2/<service-id>-<image-name>`
 - 生产标签：`sha-<gitsha>`
 - 滚动标签：`main`
 - 不使用 `latest`
@@ -69,16 +69,8 @@
 - `ALIYUN_SSH_KNOWN_HOSTS`
 - `PLATFORM_GIT_URL`
 - `REMOTE_PLATFORM_DIR`
-- `GHCR_PUSH_USERNAME`
-- `GHCR_PUSH_TOKEN`
 - `GHCR_PULL_USERNAME`
 - `GHCR_PULL_TOKEN`
-
-说明：
-
-- 默认 ACR-only 服务不需要任何 `GHCR_*` secrets
-- 只有启用 GHCR 兼容构建输出时才需要 `GHCR_PUSH_*`
-- 只有把 `productionRegistry` 设为 `ghcr` 时才需要 `GHCR_PULL_*`
 
 ## 统一入口
 
@@ -118,6 +110,16 @@ python3 scripts/init-aliyun-service.py adopt \
 
 平台仓公开后，服务器默认通过 `https://github.com/<owner>/<repo>.git` 拉取平台代码，不再要求为平台仓额外保留 GitHub SSH 读权限。
 
+`build.yaml` 的 `runtime.type` 当前支持：
+
+- `node`
+- `container-mirror`
+
+`deploy.yaml` 的健康检查当前支持：
+
+- `healthChecks`: HTTP/HTTPS URL
+- `tcpHealthChecks`: `host:port`
+
 ## 首个样板
 
 `feishu-token-service` 已作为首个样板接入，保留：
@@ -129,6 +131,12 @@ python3 scripts/init-aliyun-service.py adopt \
 其中 `api/full` 会在部署后执行 `docker compose exec -T api npx prisma db push`。
 
 当前 `feishu-token-service` 已切到 `ACR` 生产主路径，`GHCR` 只保留为可选兼容能力，不再是默认构建或默认拉取来源。
+
+`rustdesk-server` 作为非 Node、非 HTTP 服务样板接入，演示：
+
+- `runtime.type: container-mirror`
+- TCP 健康检查
+- 双镜像 `hbbs/hbbr`
 
 ## 文档
 

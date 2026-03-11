@@ -1,0 +1,23 @@
+services:
+  hbbr:
+    image: "${HBBR_IMAGE}"
+    command: ["hbbr"]
+    ports:
+      - "21117:21117"
+    volumes:
+      - ../../runtime/rustdesk-server/data:/root
+    restart: unless-stopped
+
+  hbbs:
+    image: "${HBBS_IMAGE}"
+    command: ["hbbs", "-r", "${RUSTDESK_PUBLIC_HOST}:21117"]
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+    volumes:
+      - ../../runtime/rustdesk-server/data:/root
+    depends_on:
+      hbbr:
+        condition: service_started
+    restart: unless-stopped

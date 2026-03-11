@@ -1,0 +1,52 @@
+{
+  "serviceId": "rustdesk-server",
+  "projectName": "rustdesk-server",
+  "composeFile": "services/rustdesk-server/compose.prod.yml",
+  "runtimeDir": "runtime/rustdesk-server",
+  "productionRegistry": "acr",
+  "images": {
+    "hbbs": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/rustdesk-server-hbbs"
+    },
+    "hbbr": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/rustdesk-server-hbbr"
+    }
+  },
+  "targets": {
+    "hbbs": {
+      "pullServices": ["hbbs"],
+      "upServices": ["hbbs"],
+      "runPrisma": false,
+      "healthChecks": [],
+      "tcpHealthChecks": [
+        "127.0.0.1:21115",
+        "127.0.0.1:21116"
+      ]
+    },
+    "hbbr": {
+      "pullServices": ["hbbr"],
+      "upServices": ["hbbr"],
+      "runPrisma": false,
+      "healthChecks": [],
+      "tcpHealthChecks": [
+        "127.0.0.1:21117"
+      ]
+    },
+    "full": {
+      "pullServices": ["hbbs", "hbbr"],
+      "upServices": ["hbbr", "hbbs"],
+      "runPrisma": false,
+      "healthChecks": [],
+      "tcpHealthChecks": [
+        "127.0.0.1:21115",
+        "127.0.0.1:21116",
+        "127.0.0.1:21117"
+      ]
+    }
+  },
+  "tcpHealthChecks": [
+    "127.0.0.1:21115",
+    "127.0.0.1:21116",
+    "127.0.0.1:21117"
+  ]
+}

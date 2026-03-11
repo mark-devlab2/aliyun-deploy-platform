@@ -33,16 +33,8 @@ jobs:
           path: .deploy-platform
           token: ${{ secrets.PLATFORM_REPO_TOKEN || github.token }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install service dependencies
-        run: npm ci
-
       - name: Resolve contracts
+        id: contract
         run: |
           python3 .deploy-platform/scripts/render-config.py build-contract "${{ inputs.build_config_path }}" > contract.json
           SERVICE_ID="$(python3 - <<'PY'
@@ -52,12 +44,34 @@ jobs:
           print(doc["serviceId"])
           PY
           )"
+          RUNTIME_TYPE="$(python3 - <<'PY'
+          import json
+
+          doc = json.load(open("contract.json", "r", encoding="utf-8"))
+          print(doc.get("runtime", {}).get("type", "node"))
+          PY
+          )"
           DEPLOY_FILE=".deploy-platform/services/$SERVICE_ID/deploy.yaml"
           if [ ! -f "$DEPLOY_FILE" ]; then
             echo "deploy contract missing in platform repo: $DEPLOY_FILE" >&2
             exit 1
           fi
           python3 .deploy-platform/scripts/render-config.py deploy-contract "$DEPLOY_FILE" > deploy-contract.json
+          {
+            printf 'service_id=%s\n' "$SERVICE_ID"
+            printf 'runtime_type=%s\n' "$RUNTIME_TYPE"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        if: ${{ steps.contract.outputs.runtime_type == 'node' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install service dependencies
+        if: ${{ steps.contract.outputs.runtime_type == 'node' }}
+        run: npm ci
 
       - name: Run tests
         run: |
@@ -81,9 +95,10 @@ jobs:
           import re
 
           deploy = json.load(open("deploy-contract.json", "r", encoding="utf-8"))
-          for name, repository in deploy["images"].items():
+          production_registry = deploy["productionRegistry"]
+          for name, repositories in deploy["images"].items():
               env_name = re.sub(r"[^A-Z0-9]+", "_", name.upper()) + "_IMAGE"
-              print(f"{env_name}={repository}:sha-validation")
+              print(f"{env_name}={repositories[production_registry]}:sha-validation")
           PY
           SERVICE_ID="$(python3 - <<'PY'
           import json

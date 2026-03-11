@@ -309,39 +309,44 @@ def render_caddyfile(args) -> str:
 
 
 def render_release_workflow(args) -> str:
-    return dedent(
-        f"""\
-        name: Release To Aliyun
-
-        on:
-          push:
-            branches:
-              - main
-
-        permissions:
-          contents: read
-
-        jobs:
-          build_publish:
-            uses: {args.platform_repo}/.github/workflows/build-publish.yml@{args.platform_ref}
-            with:
-              build_config_path: .deploy/build.yaml
-              platform_repo: {args.platform_repo}
-              platform_ref: {args.platform_ref}
-            secrets: inherit
-
-          deploy:
-            needs: build_publish
-            uses: {args.platform_repo}/.github/workflows/deploy-service.yml@{args.platform_ref}
-            with:
-              service_id: ${{{{ needs.build_publish.outputs.service_id }}}}
-              image_tag: ${{{{ needs.build_publish.outputs.image_tag }}}}
-              target: ${{{{ needs.build_publish.outputs.deploy_target }}}}
-              platform_repo: {args.platform_repo}
-              platform_ref: {args.platform_ref}
-            secrets: inherit
-        """
+    lines = [
+        "name: Release To Aliyun",
+        "",
+        "on:",
+        "  push:",
+        "    branches:",
+        "      - main",
+        "",
+        "permissions:",
+        "  contents: read",
+    ]
+    if args.enable_ghcr:
+        lines.append("  packages: write")
+    lines.extend(
+        [
+            "",
+            "jobs:",
+            "  build_publish:",
+            f"    uses: {args.platform_repo}/.github/workflows/build-publish.yml@{args.platform_ref}",
+            "    with:",
+            "      build_config_path: .deploy/build.yaml",
+            f"      platform_repo: {args.platform_repo}",
+            f"      platform_ref: {args.platform_ref}",
+            "    secrets: inherit",
+            "",
+            "  deploy:",
+            "    needs: build_publish",
+            f"    uses: {args.platform_repo}/.github/workflows/deploy-service.yml@{args.platform_ref}",
+            "    with:",
+            "      service_id: ${{ needs.build_publish.outputs.service_id }}",
+            "      image_tag: ${{ needs.build_publish.outputs.image_tag }}",
+            "      target: ${{ needs.build_publish.outputs.deploy_target }}",
+            f"      platform_repo: {args.platform_repo}",
+            f"      platform_ref: {args.platform_ref}",
+            "    secrets: inherit",
+        ]
     )
+    return "\n".join(lines) + "\n"
 
 
 def render_validate_workflow(args) -> str:
