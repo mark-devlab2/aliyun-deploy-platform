@@ -85,7 +85,84 @@ COMPOSE_ENV_FILE="$RUNTIME_DIR/compose.env"
 RELEASE_DIR="$RUNTIME_DIR/releases"
 CURRENT_RELEASE_FILE="$RELEASE_DIR/current.json"
 PREVIOUS_RELEASE_FILE="$RELEASE_DIR/previous.json"
-mkdir -p "$RELEASE_DIR"
+ATTEMPTS_DIR="$RELEASE_DIR/attempts"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+START_EPOCH="$(date +%s)"
+ATTEMPT_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+LAST_ATTEMPT_FILE="$RELEASE_DIR/last_attempt.json"
+ATTEMPT_FILE="$ATTEMPTS_DIR/$ATTEMPT_STAMP-$IMAGE_TAG.json"
+CURRENT_STEP="prepare"
+PULL_DURATION_SECONDS=0
+UP_DURATION_SECONDS=0
+PRISMA_DURATION_SECONDS=0
+HEALTH_DURATION_SECONDS=0
+TOTAL_DURATION_SECONDS=0
+HEALTH_SKIPPED=0
+ATTEMPT_NOTE=""
+IMAGE_SNAPSHOT_JSON='{}'
+mkdir -p "$RELEASE_DIR" "$ATTEMPTS_DIR"
+
+timestamp_utc() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+write_attempt_files() {
+  ended_at="$1"
+  status="$2"
+  note="$3"
+  python3 - "$LAST_ATTEMPT_FILE" "$ATTEMPT_FILE" "$STARTED_AT" "$ended_at" "$status" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" "$CURRENT_STEP" "$note" "$PULL_DURATION_SECONDS" "$UP_DURATION_SECONDS" "$PRISMA_DURATION_SECONDS" "$HEALTH_DURATION_SECONDS" "$TOTAL_DURATION_SECONDS" "$HEALTH_SKIPPED" <<'PY'
+import json
+import sys
+
+payload = {
+    "startedAt": sys.argv[3],
+    "endedAt": sys.argv[4],
+    "status": sys.argv[5],
+    "serviceId": sys.argv[6],
+    "target": sys.argv[7],
+    "imageTag": sys.argv[8],
+    "images": json.loads(sys.argv[9]),
+    "platformCommit": sys.argv[10],
+    "lastStep": sys.argv[11],
+    "note": sys.argv[12],
+    "durations": {
+        "pullSeconds": int(sys.argv[13]),
+        "upSeconds": int(sys.argv[14]),
+        "prismaSeconds": int(sys.argv[15]),
+        "healthSeconds": int(sys.argv[16]),
+        "totalSeconds": int(sys.argv[17]),
+    },
+    "healthChecksSkipped": sys.argv[18] == "1",
+}
+
+for path in (sys.argv[1], sys.argv[2]):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=True, indent=2)
+        fh.write("\n")
+PY
+}
+
+finish_attempt() {
+  exit_code="$1"
+  ended_at="$(timestamp_utc)"
+  TOTAL_DURATION_SECONDS=$(( $(date +%s) - START_EPOCH ))
+
+  if [ "$exit_code" -eq 0 ]; then
+    write_attempt_files "$ended_at" "success" "${ATTEMPT_NOTE:-deploy completed}"
+  else
+    if [ -z "$ATTEMPT_NOTE" ]; then
+      ATTEMPT_NOTE="deploy failed at step=$CURRENT_STEP"
+    fi
+    write_attempt_files "$ended_at" "failed" "$ATTEMPT_NOTE"
+    echo "FAILED service_id=$SERVICE_ID target=$TARGET image_tag=$IMAGE_TAG step=$CURRENT_STEP total_duration_seconds=$TOTAL_DURATION_SECONDS note=$ATTEMPT_NOTE" >&2
+  fi
+
+  rm -f "$DEPLOY_JSON_FILE"
+}
+
+trap 'finish_attempt $?' EXIT
+
+PLATFORM_COMMIT="$(git -C "$PLATFORM_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 if [ ! -f "$SERVICE_ENV_FILE" ]; then
   echo "service env file missing: $SERVICE_ENV_FILE" >&2
@@ -98,6 +175,7 @@ if grep -Eq 'replace_with_|=cli_xxx$' "$SERVICE_ENV_FILE"; then
 fi
 
 if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+  CURRENT_STEP="registry_login"
   printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >/dev/null
 fi
 
@@ -225,17 +303,33 @@ EOF
 }
 
 echo "STARTED deploy service_id=$SERVICE_ID target=$TARGET image_tag=$IMAGE_TAG"
+CURRENT_STEP="pull_images"
+step_started_epoch="$(date +%s)"
 compose_cmd pull $PULL_SERVICES
+PULL_DURATION_SECONDS=$(( $(date +%s) - step_started_epoch ))
+echo "MILESTONE pull completed duration_seconds=$PULL_DURATION_SECONDS"
+
+CURRENT_STEP="restart_services"
+step_started_epoch="$(date +%s)"
 compose_cmd up -d $UP_SERVICES
+UP_DURATION_SECONDS=$(( $(date +%s) - step_started_epoch ))
+echo "MILESTONE services restarted duration_seconds=$UP_DURATION_SECONDS"
 
 if [ "$RUN_PRISMA" = "1" ]; then
+  CURRENT_STEP="prisma_db_push"
+  step_started_epoch="$(date +%s)"
   compose_cmd exec -T api npx prisma db push
-  echo "MILESTONE prisma db push completed"
+  PRISMA_DURATION_SECONDS=$(( $(date +%s) - step_started_epoch ))
+  echo "MILESTONE prisma db push completed duration_seconds=$PRISMA_DURATION_SECONDS"
 fi
 
 if [ "$SKIP_HEALTH" -eq 0 ]; then
+  CURRENT_STEP="health_checks"
+  step_started_epoch="$(date +%s)"
   run_health_checks
+  HEALTH_DURATION_SECONDS=$(( $(date +%s) - step_started_epoch ))
 else
+  HEALTH_SKIPPED=1
   echo "MILESTONE health checks skipped"
 fi
 
@@ -244,22 +338,32 @@ if [ -f "$CURRENT_RELEASE_FILE" ]; then
 fi
 
 DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-PLATFORM_COMMIT="$(git -C "$PLATFORM_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 SNAPSHOT_FILE="$RELEASE_DIR/$(date -u +%Y%m%dT%H%M%SZ)-$IMAGE_TAG.json"
+TOTAL_DURATION_SECONDS=$(( $(date +%s) - START_EPOCH ))
+CURRENT_STEP="record_release"
 
-python3 - "$CURRENT_RELEASE_FILE" "$SNAPSHOT_FILE" "$DEPLOYED_AT" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" <<'PY'
+python3 - "$CURRENT_RELEASE_FILE" "$SNAPSHOT_FILE" "$STARTED_AT" "$DEPLOYED_AT" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" "$PULL_DURATION_SECONDS" "$UP_DURATION_SECONDS" "$PRISMA_DURATION_SECONDS" "$HEALTH_DURATION_SECONDS" "$TOTAL_DURATION_SECONDS" "$HEALTH_SKIPPED" <<'PY'
 import json
 import sys
 
 current_path = sys.argv[1]
 snapshot_path = sys.argv[2]
 payload = {
-    "deployedAt": sys.argv[3],
-    "serviceId": sys.argv[4],
-    "target": sys.argv[5],
-    "imageTag": sys.argv[6],
-    "images": json.loads(sys.argv[7]),
-    "platformCommit": sys.argv[8],
+    "startedAt": sys.argv[3],
+    "deployedAt": sys.argv[4],
+    "serviceId": sys.argv[5],
+    "target": sys.argv[6],
+    "imageTag": sys.argv[7],
+    "images": json.loads(sys.argv[8]),
+    "platformCommit": sys.argv[9],
+    "durations": {
+        "pullSeconds": int(sys.argv[10]),
+        "upSeconds": int(sys.argv[11]),
+        "prismaSeconds": int(sys.argv[12]),
+        "healthSeconds": int(sys.argv[13]),
+        "totalSeconds": int(sys.argv[14]),
+    },
+    "healthChecksSkipped": sys.argv[15] == "1",
 }
 
 for path in (current_path, snapshot_path):
@@ -268,6 +372,6 @@ for path in (current_path, snapshot_path):
         fh.write("\n")
 PY
 
-rm -f "$DEPLOY_JSON_FILE"
-
-echo "SUMMARY service_id=$SERVICE_ID target=$TARGET image_tag=$IMAGE_TAG platform_commit=$PLATFORM_COMMIT"
+CURRENT_STEP="completed"
+ATTEMPT_NOTE="deploy completed"
+echo "SUMMARY service_id=$SERVICE_ID target=$TARGET image_tag=$IMAGE_TAG platform_commit=$PLATFORM_COMMIT pull_duration_seconds=$PULL_DURATION_SECONDS up_duration_seconds=$UP_DURATION_SECONDS prisma_duration_seconds=$PRISMA_DURATION_SECONDS health_duration_seconds=$HEALTH_DURATION_SECONDS total_duration_seconds=$TOTAL_DURATION_SECONDS"

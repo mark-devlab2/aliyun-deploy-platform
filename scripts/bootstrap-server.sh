@@ -109,15 +109,35 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+checkout_platform_ref() {
+  repo_dir="$1"
+  platform_ref="$2"
+
+  if git -C "$repo_dir" ls-remote --exit-code --heads origin "$platform_ref" >/dev/null 2>&1; then
+    git -C "$repo_dir" fetch origin "refs/heads/$platform_ref:refs/remotes/origin/$platform_ref"
+    git -C "$repo_dir" checkout -B "$platform_ref" "refs/remotes/origin/$platform_ref"
+    return 0
+  fi
+
+  if git -C "$repo_dir" ls-remote --exit-code --tags origin "refs/tags/$platform_ref" >/dev/null 2>&1; then
+    git -C "$repo_dir" fetch origin "refs/tags/$platform_ref:refs/tags/$platform_ref"
+    git -C "$repo_dir" checkout --detach "refs/tags/$platform_ref"
+    return 0
+  fi
+
+  echo "platform ref not found on origin: $platform_ref" >&2
+  exit 1
+}
+
 platform_parent="$(dirname "$PLATFORM_DIR")"
 mkdir -p "$platform_parent"
 
 if [ ! -d "$PLATFORM_DIR/.git" ]; then
-  git clone --branch "$PLATFORM_REF" "$PLATFORM_GIT_URL" "$PLATFORM_DIR"
+  git clone "$PLATFORM_GIT_URL" "$PLATFORM_DIR"
+  checkout_platform_ref "$PLATFORM_DIR" "$PLATFORM_REF"
 else
-  git -C "$PLATFORM_DIR" fetch origin "$PLATFORM_REF"
-  git -C "$PLATFORM_DIR" checkout "$PLATFORM_REF"
-  git -C "$PLATFORM_DIR" pull --ff-only origin "$PLATFORM_REF"
+  git -C "$PLATFORM_DIR" remote set-url origin "$PLATFORM_GIT_URL"
+  checkout_platform_ref "$PLATFORM_DIR" "$PLATFORM_REF"
 fi
 
 if [ -n "$GHCR_USERNAME_B64" ] && [ -n "$GHCR_TOKEN_B64" ]; then

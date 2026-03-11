@@ -110,3 +110,23 @@ jobs:
             --target "$TARGET" \
             --image-tag "$IMAGE_TAG"
           REMOTE
+
+      - name: Summarize remote deploy attempt
+        if: always()
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_SSH_USER: ${{ secrets.ALIYUN_SSH_USER }}
+          ALIYUN_SSH_PORT: ${{ secrets.ALIYUN_SSH_PORT }}
+        run: |
+          REMOTE_PORT="${ALIYUN_SSH_PORT:-22}"
+          remote_attempt_path="${{ inputs.remote_platform_dir }}/runtime/${{ inputs.service_id }}/releases/last_attempt.json"
+          if ssh -p "$REMOTE_PORT" -o ConnectTimeout=10 "$ALIYUN_SSH_USER@$ALIYUN_HOST" "test -f '$remote_attempt_path'"; then
+            ssh -p "$REMOTE_PORT" -o ConnectTimeout=10 "$ALIYUN_SSH_USER@$ALIYUN_HOST" "cat '$remote_attempt_path'" >release-attempt.json
+            python3 ./.deploy-platform/scripts/render-release-summary.py release-attempt.json >>"$GITHUB_STEP_SUMMARY"
+            echo "" >>"$GITHUB_STEP_SUMMARY"
+            echo '```json' >>"$GITHUB_STEP_SUMMARY"
+            cat release-attempt.json >>"$GITHUB_STEP_SUMMARY"
+            echo '```' >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "No remote deploy attempt file found at $remote_attempt_path" >>"$GITHUB_STEP_SUMMARY"
+          fi
