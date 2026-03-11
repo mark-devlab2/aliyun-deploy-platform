@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout deploy platform repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ inputs.platform_repo }}
           ref: ${{ inputs.platform_ref }}
@@ -41,9 +41,15 @@ jobs:
           token: ${{ secrets.PLATFORM_REPO_TOKEN || github.token }}
 
       - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.ALIYUN_SSH_PRIVATE_KEY }}
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.ALIYUN_SSH_PRIVATE_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >>"$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >>"$GITHUB_ENV"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-add - <<< "$SSH_PRIVATE_KEY"
 
       - name: Configure known hosts
         env:
@@ -138,4 +144,11 @@ jobs:
             echo '```' >>"$GITHUB_STEP_SUMMARY"
           else
             echo "No remote deploy attempt file found at $remote_attempt_path" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Stop SSH agent
+        if: always()
+        run: |
+          if [ -n "${SSH_AGENT_PID:-}" ]; then
+            ssh-agent -k >/dev/null
           fi
