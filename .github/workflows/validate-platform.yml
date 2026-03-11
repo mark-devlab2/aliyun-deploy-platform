@@ -1,0 +1,48 @@
+name: Validate Platform
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout platform repository
+        uses: actions/checkout@v5
+
+      - name: Validate shell scripts
+        run: find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 sh -n
+
+      - name: Validate Python scripts
+        run: python3 -m py_compile scripts/*.py
+
+      - name: Validate deploy contracts and compose rendering
+        run: |
+          set -eu
+          for deploy_file in services/*/deploy.yaml; do
+            service_id="$(basename "$(dirname "$deploy_file")")"
+            python3 scripts/render-config.py deploy-contract "$deploy_file" > deploy-contract.json
+            runtime_dir="$PWD/runtime/$service_id"
+            mkdir -p "$runtime_dir"
+            cp "services/$service_id/compose.prod.env.example" "$runtime_dir/service.env"
+            python3 - <<'PY' > "$runtime_dir/images.env"
+          import json
+          import re
+
+          deploy = json.load(open("deploy-contract.json", "r", encoding="utf-8"))
+          for name, repositories in deploy["images"].items():
+              env_name = re.sub(r"[^A-Z0-9]+", "_", name.upper()) + "_IMAGE"
+              repository = repositories[deploy["productionRegistry"]]
+              print(f"{env_name}={repository}:sha-validation")
+          PY
+            cat "$runtime_dir/images.env" >> "$runtime_dir/service.env"
+            docker compose \
+              --project-name "validation-$service_id" \
+              --env-file "$runtime_dir/service.env" \
+              -f "services/$service_id/compose.prod.yml" \
+              config >/dev/null
+          done
