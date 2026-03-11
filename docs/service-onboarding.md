@@ -98,6 +98,7 @@ ghcr.io/mark-devlab2/<service-id>-<image-name>
 - `runtime/<service-id>/service.env`
 - `runtime/<service-id>/compose.env`
 - `runtime/<service-id>/releases/*`
+- `runtime/<service-id>/releases/last_attempt.json`
 - Docker named volumes
 
 服务器不要保留：

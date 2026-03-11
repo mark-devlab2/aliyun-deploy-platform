@@ -146,6 +146,8 @@ deploy-feishu-token-service.sh --target full --image-tag sha-<gitsha>
 
 - `runtime/feishu-token-service/releases/current.json`
 - `runtime/feishu-token-service/releases/previous.json`
+- `runtime/feishu-token-service/releases/last_attempt.json`
+- `runtime/feishu-token-service/releases/attempts/*.json`
 
 默认回滚到上一版：
 
