@@ -28,7 +28,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build_publish:
@@ -92,10 +91,10 @@ jobs:
 
       - name: Log in to enabled registries
         env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          GHCR_PUSH_USERNAME: ${{ secrets.GHCR_PUSH_USERNAME }}
+          GHCR_PUSH_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
         run: sh ./.deploy-platform/scripts/login-registries.sh contract.json
 
       - name: Build and publish images

@@ -33,7 +33,7 @@
 
 ## 命名规范
 
-- 镜像：`<acr-host>/<namespace>/<service-id>-<image-name>`
+- 镜像：`<registry-host>/<namespace>/<service-id>-<image-name>`
 - 生产标签：`sha-<gitsha>`
 - 滚动标签：`main`
 - 不使用 `latest`
@@ -69,8 +69,16 @@
 - `ALIYUN_SSH_KNOWN_HOSTS`
 - `PLATFORM_GIT_URL`
 - `REMOTE_PLATFORM_DIR`
+- `GHCR_PUSH_USERNAME`
+- `GHCR_PUSH_TOKEN`
 - `GHCR_PULL_USERNAME`
 - `GHCR_PULL_TOKEN`
+
+说明：
+
+- 默认 ACR-only 服务不需要任何 `GHCR_*` secrets
+- 只有启用 GHCR 兼容构建输出时才需要 `GHCR_PUSH_*`
+- 只有把 `productionRegistry` 设为 `ghcr` 时才需要 `GHCR_PULL_*`
 
 ## 统一入口
 

@@ -23,11 +23,11 @@ while IFS="$(printf '\t')" read -r registry_name registry_host; do
   [ -n "$registry_name" ] || continue
   case "$registry_name:$registry_host" in
     ghcr:ghcr.io)
-      if [ -z "${GITHUB_ACTOR:-}" ] || [ -z "${GITHUB_TOKEN:-}" ]; then
-        echo "missing GitHub credentials for ghcr.io login" >&2
+      if [ -z "${GHCR_PUSH_USERNAME:-}" ] || [ -z "${GHCR_PUSH_TOKEN:-}" ]; then
+        echo "missing GHCR push credentials for ghcr.io login" >&2
         exit 1
       fi
-      printf '%s' "$GITHUB_TOKEN" | docker login "$registry_host" -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+      printf '%s' "$GHCR_PUSH_TOKEN" | docker login "$registry_host" -u "$GHCR_PUSH_USERNAME" --password-stdin >/dev/null
       ;;
     acr:*.aliyuncs.com|default:*.aliyuncs.com)
       if [ -z "${ACR_USERNAME:-}" ] || [ -z "${ACR_PASSWORD:-}" ]; then

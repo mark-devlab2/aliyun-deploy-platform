@@ -94,6 +94,11 @@ registry.cn-beijing.aliyuncs.com/mark-devlab2/<service-id>-<image-name>
 
 默认只启用 ACR，`GHCR` 只作为可选兼容镜像仓。
 
+如果显式启用 `GHCR`：
+
+- 构建推送需要 `GHCR_PUSH_USERNAME` / `GHCR_PUSH_TOKEN`
+- 只有把 `deploy.productionRegistry` 设为 `ghcr` 时，服务器拉取才需要 `GHCR_PULL_USERNAME` / `GHCR_PULL_TOKEN`
+
 ## 5. 服务器约定
 
 服务器只保留：
