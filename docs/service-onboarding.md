@@ -40,8 +40,8 @@ python3 scripts/init-aliyun-service.py adopt \
 `build.yaml` 至少要定义：
 
 - `serviceId`
-- `registry.host`
-- `registry.owner`
+- `registries`
+- `deploy.productionRegistry`
 - `test.run`
 - `images[].name`
 - `images[].image`
@@ -74,10 +74,10 @@ python3 scripts/init-aliyun-service.py adopt \
 
 ## 4. 镜像命名约定
 
-统一使用：
+统一默认使用：
 
 ```text
-ghcr.io/mark-devlab2/<service-id>-<image-name>
+registry.cn-beijing.aliyuncs.com/mark-devlab2/<service-id>-<image-name>
 ```
 
 标签统一：
@@ -89,6 +89,8 @@ ghcr.io/mark-devlab2/<service-id>-<image-name>
 
 - `latest`
 - 服务仓各自自定义的标签格式
+
+默认只启用 ACR，`GHCR` 只作为可选兼容镜像仓。
 
 ## 5. 服务器约定
 
@@ -126,6 +128,8 @@ ghcr.io/mark-devlab2/<service-id>-<image-name>
 - `feishu-token-service/.deploy/build.yaml`
 
 优先复制样板，再做最小化改动，不要重新发明一套发布规则。
+
+默认新服务仓与平台仓公开；只有 ops/config/runtime 仓才保持私有。
 
 ## 8. 生成后必须手工复核的点
 

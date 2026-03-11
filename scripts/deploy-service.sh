@@ -100,6 +100,8 @@ TOTAL_DURATION_SECONDS=0
 HEALTH_SKIPPED=0
 ATTEMPT_NOTE=""
 IMAGE_SNAPSHOT_JSON='{}'
+PRODUCTION_REGISTRY=""
+PRODUCTION_REGISTRY_HOST=""
 mkdir -p "$RELEASE_DIR" "$ATTEMPTS_DIR"
 
 timestamp_utc() {
@@ -110,7 +112,7 @@ write_attempt_files() {
   ended_at="$1"
   status="$2"
   note="$3"
-  python3 - "$LAST_ATTEMPT_FILE" "$ATTEMPT_FILE" "$STARTED_AT" "$ended_at" "$status" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" "$CURRENT_STEP" "$note" "$PULL_DURATION_SECONDS" "$UP_DURATION_SECONDS" "$PRISMA_DURATION_SECONDS" "$HEALTH_DURATION_SECONDS" "$TOTAL_DURATION_SECONDS" "$HEALTH_SKIPPED" <<'PY'
+  python3 - "$LAST_ATTEMPT_FILE" "$ATTEMPT_FILE" "$STARTED_AT" "$ended_at" "$status" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" "$PRODUCTION_REGISTRY" "$CURRENT_STEP" "$note" "$PULL_DURATION_SECONDS" "$UP_DURATION_SECONDS" "$PRISMA_DURATION_SECONDS" "$HEALTH_DURATION_SECONDS" "$TOTAL_DURATION_SECONDS" "$HEALTH_SKIPPED" <<'PY'
 import json
 import sys
 
@@ -123,16 +125,17 @@ payload = {
     "imageTag": sys.argv[8],
     "images": json.loads(sys.argv[9]),
     "platformCommit": sys.argv[10],
-    "lastStep": sys.argv[11],
-    "note": sys.argv[12],
+    "productionRegistry": sys.argv[11],
+    "lastStep": sys.argv[12],
+    "note": sys.argv[13],
     "durations": {
-        "pullSeconds": int(sys.argv[13]),
-        "upSeconds": int(sys.argv[14]),
-        "prismaSeconds": int(sys.argv[15]),
-        "healthSeconds": int(sys.argv[16]),
-        "totalSeconds": int(sys.argv[17]),
+        "pullSeconds": int(sys.argv[14]),
+        "upSeconds": int(sys.argv[15]),
+        "prismaSeconds": int(sys.argv[16]),
+        "healthSeconds": int(sys.argv[17]),
+        "totalSeconds": int(sys.argv[18]),
     },
-    "healthChecksSkipped": sys.argv[18] == "1",
+    "healthChecksSkipped": sys.argv[19] == "1",
 }
 
 for path in (sys.argv[1], sys.argv[2]):
@@ -174,11 +177,6 @@ if grep -Eq 'replace_with_|=cli_xxx$' "$SERVICE_ENV_FILE"; then
   exit 1
 fi
 
-if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
-  CURRENT_STEP="registry_login"
-  printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >/dev/null
-fi
-
 PROJECT_NAME="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
 import json
 import sys
@@ -194,6 +192,44 @@ print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["composeFile"])
 PY
 )"
 COMPOSE_FILE="$PLATFORM_DIR/$COMPOSE_FILE_REL"
+PRODUCTION_REGISTRY="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], "r", encoding="utf-8"))["productionRegistry"])
+PY
+)"
+PRODUCTION_REGISTRY_HOST="$(python3 - "$DEPLOY_JSON_FILE" <<'PY'
+import json
+import sys
+
+doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+first_image = next(iter(doc["images"].values()))
+repository = first_image[doc["productionRegistry"]]
+print(repository.split("/", 1)[0])
+PY
+)"
+CURRENT_STEP="registry_login"
+case "$PRODUCTION_REGISTRY_HOST" in
+  ghcr.io)
+    if [ -z "${GHCR_USERNAME:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
+      echo "missing GHCR credentials for production registry ghcr.io" >&2
+      exit 1
+    fi
+    printf '%s' "$GHCR_TOKEN" | docker login "$PRODUCTION_REGISTRY_HOST" -u "$GHCR_USERNAME" --password-stdin >/dev/null
+    ;;
+  *.aliyuncs.com)
+    if [ -z "${ACR_USERNAME:-}" ] || [ -z "${ACR_PASSWORD:-}" ]; then
+      echo "missing ACR credentials for production registry $PRODUCTION_REGISTRY_HOST" >&2
+      exit 1
+    fi
+    printf '%s' "$ACR_PASSWORD" | docker login "$PRODUCTION_REGISTRY_HOST" -u "$ACR_USERNAME" --password-stdin >/dev/null
+    ;;
+  *)
+    echo "unsupported production registry host: $PRODUCTION_REGISTRY_HOST" >&2
+    exit 1
+    ;;
+esac
 IMAGE_ENV_LINES="$(python3 - "$DEPLOY_JSON_FILE" "$IMAGE_TAG" <<'PY'
 import json
 import re
@@ -201,7 +237,9 @@ import sys
 
 doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
 tag = sys.argv[2]
-for name, repository in doc["images"].items():
+production_registry = doc["productionRegistry"]
+for name, repositories in doc["images"].items():
+    repository = repositories[production_registry]
     env_name = re.sub(r"[^A-Z0-9]+", "_", name.upper()) + "_IMAGE"
     print(f"{env_name}={repository}:{tag}")
 PY
@@ -212,7 +250,11 @@ import sys
 
 doc = json.load(open(sys.argv[1], "r", encoding="utf-8"))
 tag = sys.argv[2]
-images = {name: f"{repository}:{tag}" for name, repository in doc["images"].items()}
+production_registry = doc["productionRegistry"]
+images = {
+    name: f"{repositories[production_registry]}:{tag}"
+    for name, repositories in doc["images"].items()
+}
 print(json.dumps(images, ensure_ascii=True, separators=(",", ":")))
 PY
 )"
@@ -342,7 +384,7 @@ SNAPSHOT_FILE="$RELEASE_DIR/$(date -u +%Y%m%dT%H%M%SZ)-$IMAGE_TAG.json"
 TOTAL_DURATION_SECONDS=$(( $(date +%s) - START_EPOCH ))
 CURRENT_STEP="record_release"
 
-python3 - "$CURRENT_RELEASE_FILE" "$SNAPSHOT_FILE" "$STARTED_AT" "$DEPLOYED_AT" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" "$PULL_DURATION_SECONDS" "$UP_DURATION_SECONDS" "$PRISMA_DURATION_SECONDS" "$HEALTH_DURATION_SECONDS" "$TOTAL_DURATION_SECONDS" "$HEALTH_SKIPPED" <<'PY'
+python3 - "$CURRENT_RELEASE_FILE" "$SNAPSHOT_FILE" "$STARTED_AT" "$DEPLOYED_AT" "$SERVICE_ID" "$TARGET" "$IMAGE_TAG" "$IMAGE_SNAPSHOT_JSON" "$PLATFORM_COMMIT" "$PRODUCTION_REGISTRY" "$PULL_DURATION_SECONDS" "$UP_DURATION_SECONDS" "$PRISMA_DURATION_SECONDS" "$HEALTH_DURATION_SECONDS" "$TOTAL_DURATION_SECONDS" "$HEALTH_SKIPPED" <<'PY'
 import json
 import sys
 
@@ -356,14 +398,15 @@ payload = {
     "imageTag": sys.argv[7],
     "images": json.loads(sys.argv[8]),
     "platformCommit": sys.argv[9],
+    "productionRegistry": sys.argv[10],
     "durations": {
-        "pullSeconds": int(sys.argv[10]),
-        "upSeconds": int(sys.argv[11]),
-        "prismaSeconds": int(sys.argv[12]),
-        "healthSeconds": int(sys.argv[13]),
-        "totalSeconds": int(sys.argv[14]),
+        "pullSeconds": int(sys.argv[11]),
+        "upSeconds": int(sys.argv[12]),
+        "prismaSeconds": int(sys.argv[13]),
+        "healthSeconds": int(sys.argv[14]),
+        "totalSeconds": int(sys.argv[15]),
     },
-    "healthChecksSkipped": sys.argv[15] == "1",
+    "healthChecksSkipped": sys.argv[16] == "1",
 }
 
 for path in (current_path, snapshot_path):

@@ -25,7 +25,7 @@
 
 1. 服务仓 `push main`
 2. GitHub Actions 跑测试
-3. GitHub Actions 构建镜像并推送到 GHCR
+3. GitHub Actions 构建镜像并推送到 ACR（默认）或可选兼容 GHCR
 4. GitHub Actions 通过 SSH 触发服务器部署
 5. 服务器 pull `sha-*` 镜像并重启容器
 6. 服务器执行健康检查并记录回滚元数据
@@ -33,7 +33,7 @@
 
 ## 命名规范
 
-- 镜像：`ghcr.io/mark-devlab2/<service-id>-<image-name>`
+- 镜像：`registry.cn-beijing.aliyuncs.com/mark-devlab2/<service-id>-<image-name>`
 - 生产标签：`sha-<gitsha>`
 - 滚动标签：`main`
 - 不使用 `latest`
@@ -60,8 +60,8 @@
 - `ALIYUN_HOST`
 - `ALIYUN_SSH_USER`
 - `ALIYUN_SSH_PRIVATE_KEY`
-- `GHCR_PULL_USERNAME`
-- `GHCR_PULL_TOKEN`
+- `ACR_USERNAME`
+- `ACR_PASSWORD`
 
 可选：
 
@@ -69,7 +69,8 @@
 - `ALIYUN_SSH_KNOWN_HOSTS`
 - `PLATFORM_GIT_URL`
 - `REMOTE_PLATFORM_DIR`
-- `PLATFORM_REPO_TOKEN`
+- `GHCR_PULL_USERNAME`
+- `GHCR_PULL_TOKEN`
 
 ## 统一入口
 
@@ -96,14 +97,18 @@ python3 scripts/init-aliyun-service.py adopt \
 - `init` 默认不覆盖已有文件
 - `adopt` 默认只补缺失文件
 - 只有显式 `--force` 才覆盖已有文件
+- 默认新服务仓和平台仓公开，ops/config/runtime 仓保持私有
+- 默认只启用 ACR；只有明确需要镜像对外分发或多云复用时才启用 GHCR
 
 ## 服务接入步骤
 
 1. 运行 `scripts/init-aliyun-service.py init` 或 `adopt`
 2. 复核生成的 `.deploy/build.yaml` 和平台服务目录
 3. 补全业务专属 Dockerfile、测试命令和 `service.env`
-4. 配置 GitHub deploy secrets
+4. 配置 GitHub deploy secrets 或 ACR 凭证
 5. 合并后通过 `push main` 自动发布
+
+平台仓公开后，服务器默认通过 `https://github.com/<owner>/<repo>.git` 拉取平台代码，不再要求为平台仓额外保留 GitHub SSH 读权限。
 
 ## 首个样板
 
@@ -114,6 +119,8 @@ python3 scripts/init-aliyun-service.py adopt \
 - `full`
 
 其中 `api/full` 会在部署后执行 `docker compose exec -T api npx prisma db push`。
+
+当前 `feishu-token-service` 为了兼容已上线的 GHCR 发布链路，仍保留 GHCR 生产配置；平台侧已经具备 ACR-first 能力，待配置 ACR 账号后可把 `productionRegistry` 切到 `acr`。
 
 ## 文档
 

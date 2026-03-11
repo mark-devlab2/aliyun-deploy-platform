@@ -1,6 +1,6 @@
 # 首发执行清单
 
-本文档用于把 `feishu-token-service` 从“服务器源码仓远端 build”切换到“GitHub Actions + GHCR + 服务器 pull 镜像”。
+本文档用于把阿里云服务切换到“GitHub Actions + ACR + 服务器 pull 镜像”。
 
 ## 1. 建立平台仓
 
@@ -35,8 +35,8 @@ git push -u origin main
 - `ALIYUN_HOST`
 - `ALIYUN_SSH_USER`
 - `ALIYUN_SSH_PRIVATE_KEY`
-- `GHCR_PULL_USERNAME`
-- `GHCR_PULL_TOKEN`
+- `ACR_USERNAME`
+- `ACR_PASSWORD`
 
 可选：
 
@@ -44,12 +44,13 @@ git push -u origin main
 - `ALIYUN_SSH_KNOWN_HOSTS`
 - `PLATFORM_GIT_URL`
 - `REMOTE_PLATFORM_DIR`
-- `PLATFORM_REPO_TOKEN`
+- `GHCR_PULL_USERNAME`
+- `GHCR_PULL_TOKEN`
 
 建议：
 
-- `GHCR_PULL_TOKEN` 只给 `packages:read`
-- `PLATFORM_REPO_TOKEN` 只在平台仓是私有仓时提供，并至少给 `contents:read`
+- `PLATFORM_REPO_TOKEN` 只在平台仓仍是私有仓时提供，并至少给 `contents:read`
+- `GHCR_PULL_TOKEN` 只在需要 GHCR 兼容镜像源时保留，并至少给 `packages:read`
 
 ## 4. 初始化服务器
 
@@ -60,7 +61,7 @@ git push -u origin main
 - `docker compose`
 - `curl`
 - 拉取平台仓的 GitHub 权限
-- 拉取 GHCR 包的权限
+- 拉取 ACR 包的权限
 
 推荐平台目录：
 
@@ -72,14 +73,12 @@ git push -u origin main
 
 ```bash
 cd /Users/mark/Documents/New\ project/aliyun-deploy-platform
-GHCR_USERNAME='<ghcr-user>' \
-GHCR_TOKEN='<ghcr-read-token>' \
 ./scripts/bootstrap-server.sh \
   --remote-host '<aliyun-host>' \
   --remote-user '<aliyun-user>' \
   --platform-dir '/opt/aliyun-deploy-platform' \
-  --platform-git-url 'git@github.com:mark-devlab2/aliyun-deploy-platform.git' \
-  --platform-ref 'main' \
+  --platform-git-url 'https://github.com/mark-devlab2/aliyun-deploy-platform.git' \
+  --platform-ref 'v1' \
   --service-id 'feishu-token-service'
 ```
 
@@ -121,6 +120,7 @@ services/feishu-token-service/compose.prod.env.example
 1. 向 `main` push 一次可控变更
 2. 观察 `Release To Aliyun` workflow
 3. 确认镜像标签为 `sha-<gitsha>`
+4. 确认镜像源为 ACR；如果当前仍处于 GHCR 兼容阶段，先不要删除 GHCR 相关 secrets
 
 如需手动触发：
 

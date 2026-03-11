@@ -21,6 +21,22 @@ def image_repository(registry_host: str, registry_owner: str, service_id: str, i
     return f"{registry_host}/{registry_owner}/{service_id}-{image_name}"
 
 
+def registry_configs(args) -> dict:
+    registries = {
+        "acr": {
+            "host": args.acr_host,
+            "namespace": args.acr_namespace,
+            "enabled": True,
+        },
+        "ghcr": {
+            "host": args.ghcr_host,
+            "namespace": args.ghcr_namespace,
+            "enabled": args.enable_ghcr,
+        },
+    }
+    return {name: config for name, config in registries.items() if config["enabled"]}
+
+
 def build_contract(args) -> dict:
     images = [
         {
@@ -45,23 +61,29 @@ def build_contract(args) -> dict:
 
     return {
         "serviceId": args.service_id,
-        "registry": {
-            "host": args.registry_host,
-            "owner": args.registry_owner,
-        },
+        "registries": registry_configs(args),
         "runtime": {
             "type": args.runtime_type,
             "version": args.runtime_version,
         },
         "test": {"run": args.test_command},
         "images": images,
-        "deploy": {"defaultTarget": args.default_target or default_target},
+        "deploy": {
+            "defaultTarget": args.default_target or default_target,
+            "productionRegistry": args.production_registry,
+        },
     }
 
 
 def deploy_contract(args) -> dict:
+    registries = registry_configs(args)
     images = {
-        "api": image_repository(args.registry_host, args.registry_owner, args.service_id, "api")
+        "api": {
+            registry_name: image_repository(
+                registry["host"], registry["namespace"], args.service_id, "api"
+            )
+            for registry_name, registry in registries.items()
+        }
     }
     targets = {
         "api": {
@@ -73,9 +95,12 @@ def deploy_contract(args) -> dict:
     }
 
     if args.archetype == "node-api-admin-web":
-        images["admin-web"] = image_repository(
-            args.registry_host, args.registry_owner, args.service_id, "admin-web"
-        )
+        images["admin-web"] = {
+            registry_name: image_repository(
+                registry["host"], registry["namespace"], args.service_id, "admin-web"
+            )
+            for registry_name, registry in registries.items()
+        }
         targets["admin-web"] = {
             "pullServices": ["admin-web"],
             "upServices": ["admin-web", "caddy"],
@@ -95,6 +120,7 @@ def deploy_contract(args) -> dict:
         "composeFile": f"services/{args.service_id}/compose.prod.yml",
         "runtimeDir": args.runtime_dir,
         "images": images,
+        "productionRegistry": args.production_registry,
         "targets": targets,
     }
 
@@ -338,7 +364,6 @@ def render_validate_workflow(args) -> str:
               build_config_path: .deploy/build.yaml
               platform_repo: {args.platform_repo}
               platform_ref: {args.platform_ref}
-            secrets: inherit
         """
     )
 
@@ -351,7 +376,7 @@ def render_service_doc(args) -> str:
         "",
         "1. Pull Request 跑 `validate.yml`",
         "2. `push main` 触发 GitHub Actions",
-        "3. GitHub Actions 跑测试、构建镜像并推送 GHCR",
+        "3. GitHub Actions 跑测试、构建镜像并推送到 ACR（可选兼容 GHCR）",
         "4. GitHub Actions 触发阿里云服务器 pull 镜像并重启",
         "5. 服务器执行健康检查并记录回滚状态",
         "",
@@ -382,6 +407,7 @@ def render_service_doc(args) -> str:
             "- 填好 GitHub deploy secrets",
             "- 补全 `service.env` 中的业务环境变量",
             "- 校验健康检查 URL 和域名配置",
+            "- 默认新服务仓和平台仓公开；ops/config/runtime 仓保持私有",
             "",
             "## 参考",
             "",
@@ -430,8 +456,14 @@ def parse_args():
         subparser.add_argument("--service-repo-dir", type=Path, required=True)
         subparser.add_argument("--platform-dir", type=Path, default=PLATFORM_ROOT)
         subparser.add_argument("--archetype", choices=["node-api", "node-api-admin-web"], default="node-api")
-        subparser.add_argument("--registry-host", default="ghcr.io")
-        subparser.add_argument("--registry-owner", default="mark-devlab2")
+        subparser.add_argument("--acr-host", dest="acr_host", default="registry.cn-beijing.aliyuncs.com")
+        subparser.add_argument("--acr-namespace", dest="acr_namespace", default="mark-devlab2")
+        subparser.add_argument("--registry-host", dest="acr_host")
+        subparser.add_argument("--registry-owner", dest="acr_namespace")
+        subparser.add_argument("--ghcr-host", default="ghcr.io")
+        subparser.add_argument("--ghcr-namespace", default="")
+        subparser.add_argument("--enable-ghcr", action=argparse.BooleanOptionalAction, default=False)
+        subparser.add_argument("--production-registry", choices=["acr", "ghcr"], default="acr")
         subparser.add_argument("--platform-repo", default="mark-devlab2/aliyun-deploy-platform")
         subparser.add_argument("--platform-ref", default="main")
         subparser.add_argument("--runtime-type", default="node")
@@ -464,6 +496,10 @@ def parse_args():
 
 
 def fill_defaults(args):
+    if not args.ghcr_namespace:
+        args.ghcr_namespace = args.acr_namespace
+    if args.production_registry == "ghcr" and not args.enable_ghcr:
+        raise SystemExit("productionRegistry=ghcr requires --enable-ghcr")
     if not args.project_name:
         args.project_name = args.service_id
     if not args.runtime_dir:
@@ -511,6 +547,7 @@ def main():
         "nextSteps": [
             "Fill service.env with real application settings.",
             "Configure GitHub deploy secrets in the service repo.",
+            "If production should stay in China, configure ACR_USERNAME/ACR_PASSWORD before the first release.",
             "Review generated health URLs, domains, Dockerfiles, and compose defaults.",
         ],
     }
