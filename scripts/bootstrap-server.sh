@@ -127,14 +127,14 @@ checkout_platform_ref() {
   repo_dir="$1"
   platform_ref="$2"
 
-  if run_with_retry git -C "$repo_dir" ls-remote --exit-code --heads origin "$platform_ref" >/dev/null 2>&1; then
-    run_with_retry git -C "$repo_dir" fetch origin "refs/heads/$platform_ref:refs/remotes/origin/$platform_ref"
+  # Some hosts can fetch from origin but hang on `git ls-remote origin ...`.
+  # Resolve the ref by attempting the fetch directly instead of probing first.
+  if run_with_retry git -C "$repo_dir" fetch origin "refs/heads/$platform_ref:refs/remotes/origin/$platform_ref" >/dev/null 2>&1; then
     git -C "$repo_dir" checkout -B "$platform_ref" "refs/remotes/origin/$platform_ref"
     return 0
   fi
 
-  if run_with_retry git -C "$repo_dir" ls-remote --exit-code --tags origin "refs/tags/$platform_ref" >/dev/null 2>&1; then
-    run_with_retry git -C "$repo_dir" fetch origin "refs/tags/$platform_ref:refs/tags/$platform_ref"
+  if run_with_retry git -C "$repo_dir" fetch origin "refs/tags/$platform_ref:refs/tags/$platform_ref" >/dev/null 2>&1; then
     git -C "$repo_dir" checkout --detach "refs/tags/$platform_ref"
     return 0
   fi
