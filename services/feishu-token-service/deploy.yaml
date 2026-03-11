@@ -6,11 +6,11 @@
   "productionRegistry": "ghcr",
   "images": {
     "api": {
-      "acr": "registry.cn-beijing.aliyuncs.com/mark-devlab2/feishu-token-service-api",
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/feishu-token-service-api",
       "ghcr": "ghcr.io/mark-devlab2/feishu-token-service-api"
     },
     "admin-web": {
-      "acr": "registry.cn-beijing.aliyuncs.com/mark-devlab2/feishu-token-service-admin-web",
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/feishu-token-service-admin-web",
       "ghcr": "ghcr.io/mark-devlab2/feishu-token-service-admin-web"
     }
   },
