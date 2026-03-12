@@ -13,3 +13,8 @@ admin.himark.me {
 
   reverse_proxy admin-web:80
 }
+
+car.himark.me {
+  encode gzip zstd
+  reverse_proxy teslamate-cn-edge:80
+}

@@ -190,13 +190,10 @@ services:
       DOMAIN: "${TM_DOMAIN}"
       API_TOKEN: "${API_TOKEN}"
       BASIC_AUTH_FILE: /etc/nginx/secrets/teslamate.htpasswd
-      TLS_MODE: "${TLS_MODE}"
+      TLS_MODE: "${EDGE_TLS_MODE}"
       NGINX_CLIENT_MAX_BODY_SIZE: "${NGINX_CLIENT_MAX_BODY_SIZE}"
       NGINX_RATE_LIMIT: "${NGINX_RATE_LIMIT}"
       NGINX_RATE_LIMIT_BURST: "${NGINX_RATE_LIMIT_BURST}"
-    ports:
-      - "${EDGE_HTTP_PUBLISH:-80:80}"
-      - "${EDGE_HTTPS_PUBLISH:-443:443}"
     depends_on:
       teslamate:
         condition: service_healthy
@@ -218,3 +215,13 @@ services:
       - ../../runtime/teslamate-cn/nginx/htpasswd:/etc/nginx/secrets/teslamate.htpasswd:ro
       - ../../runtime/teslamate-cn/logs/nginx:/var/log/nginx
     restart: unless-stopped
+    networks:
+      default:
+      public-edge:
+        aliases:
+          - teslamate-cn-edge
+
+networks:
+  public-edge:
+    name: "${PUBLIC_EDGE_NETWORK}"
+    external: true
