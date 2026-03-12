@@ -1,0 +1,72 @@
+{
+  "serviceId": "teslamate-cn",
+  "projectName": "teslamate-cn",
+  "composeFile": "services/teslamate-cn/compose.prod.yml",
+  "runtimeDir": "runtime/teslamate-cn",
+  "productionRegistry": "acr",
+  "images": {
+    "edge": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-edge"
+    },
+    "teslamate": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-teslamate"
+    },
+    "grafana": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-grafana"
+    },
+    "mosquitto": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-mosquitto"
+    },
+    "teslamateapi": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-teslamateapi"
+    },
+    "cn-geocoder": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-cn-geocoder"
+    },
+    "tile-proxy": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-tile-proxy"
+    },
+    "postgres": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-postgres"
+    },
+    "acme": {
+      "acr": "crpi-vbmaa8d6ek5k7rjt.cn-beijing.personal.cr.aliyuncs.com/himark/teslamate-cn-acme"
+    }
+  },
+  "targets": {
+    "teslamate": {
+      "pullServices": ["teslamate", "cn-geocoder", "tile-proxy", "mosquitto"],
+      "upServices": ["mosquitto", "cn-geocoder", "tile-proxy", "teslamate"],
+      "runPrisma": false,
+      "healthChecks": ["https://car.himark.me/_health/teslamate"]
+    },
+    "api": {
+      "pullServices": ["teslamateapi"],
+      "upServices": ["teslamateapi"],
+      "runPrisma": false,
+      "healthChecks": ["https://car.himark.me/api/readyz"]
+    },
+    "grafana": {
+      "pullServices": ["grafana"],
+      "upServices": ["grafana"],
+      "runPrisma": false,
+      "healthChecks": ["https://car.himark.me/grafana/login"]
+    },
+    "edge": {
+      "pullServices": ["edge", "acme"],
+      "upServices": ["acme", "edge"],
+      "runPrisma": false,
+      "healthChecks": ["https://car.himark.me/_health/teslamate"]
+    },
+    "full": {
+      "pullServices": ["postgres", "mosquitto", "cn-geocoder", "tile-proxy", "teslamate", "teslamateapi", "grafana", "acme", "edge"],
+      "upServices": ["postgres", "mosquitto", "cn-geocoder", "tile-proxy", "teslamate", "teslamateapi", "grafana", "acme", "edge"],
+      "runPrisma": false,
+      "healthChecks": [
+        "https://car.himark.me/_health/teslamate",
+        "https://car.himark.me/api/readyz",
+        "https://car.himark.me/grafana/login"
+      ]
+    }
+  }
+}

@@ -1,0 +1,220 @@
+services:
+  postgres:
+    image: "${POSTGRES_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      TZ: "${TZ}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - ../../runtime/teslamate-cn/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  mosquitto:
+    image: "${MOSQUITTO_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -u \"$MOSQUITTO_USERNAME\" -P \"$MOSQUITTO_PASSWORD\" -t '$$SYS/broker/version' -C 1 -W 3 >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ../../runtime/teslamate-cn/mosquitto/data:/mosquitto/data
+      - ../../runtime/teslamate-cn/mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+
+  cn-geocoder:
+    image: "${CN_GEOCODER_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      GEOCODER_DB_PATH: /data/geocoder-cache.sqlite3
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - ../../runtime/teslamate-cn/cn-geocoder:/data
+    restart: unless-stopped
+
+  tile-proxy:
+    image: "${TILE_PROXY_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      TILE_CACHE_DIR: /data/cache
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - ../../runtime/teslamate-cn/tile-cache:/data
+    restart: unless-stopped
+
+  teslamate:
+    image: "${TESLAMATE_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      TZ: "${TZ}"
+      DATABASE_HOST: postgres
+      DATABASE_NAME: "${POSTGRES_DB}"
+      DATABASE_USER: "${POSTGRES_USER}"
+      DATABASE_PASS: "${POSTGRES_PASSWORD}"
+      MQTT_HOST: mosquitto
+      MQTT_USERNAME: "${MOSQUITTO_USERNAME}"
+      MQTT_PASSWORD: "${MOSQUITTO_PASSWORD}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+      SECRET_KEY_BASE: "${SECRET_KEY_BASE}"
+      SIGNING_SALT: "${SIGNING_SALT}"
+      CHECK_ORIGIN: "${CHECK_ORIGIN}"
+      VIRTUAL_HOST: "${TM_DOMAIN}"
+      URL_PATH: /
+      TZDATA_DIR: /tmp
+      TM_MAP_TILE_URL: "${TM_MAP_TILE_URL}"
+      TM_GEOCODER_BASE_URL: "${TM_GEOCODER_BASE_URL}"
+      TESLA_AUTH_HOST: "${TESLA_AUTH_HOST}"
+      TESLA_API_HOST: "${TESLA_API_HOST}"
+      TESLA_WSS_HOST: "${TESLA_WSS_HOST}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      cn-geocoder:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4000/health_check >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    volumes:
+      - ../../runtime/teslamate-cn/teslamate/import:/opt/app/import
+      - ../../runtime/teslamate-cn/teslamate/backup:/opt/app/backup
+    restart: unless-stopped
+
+  teslamateapi:
+    image: "${TESLAMATEAPI_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      TZ: "${TZ}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+      DATABASE_HOST: postgres
+      DATABASE_NAME: "${POSTGRES_DB}"
+      DATABASE_USER: "${POSTGRES_USER}"
+      DATABASE_PASS: "${POSTGRES_PASSWORD}"
+      MQTT_HOST: mosquitto
+      MQTT_USERNAME: "${MOSQUITTO_USERNAME}"
+      MQTT_PASSWORD: "${MOSQUITTO_PASSWORD}"
+      MQTT_NAMESPACE: "${MQTT_NAMESPACE}"
+      TESLAMATE_HOST: teslamate
+      TESLAMATE_PORT: 4000
+      API_TOKEN: "${API_TOKEN}"
+      API_TOKEN_DISABLE: "${TESLAMATEAPI_API_TOKEN_DISABLE}"
+      ENABLE_COMMANDS: "${TESLAMATEAPI_ENABLE_COMMANDS}"
+      TESLA_API_HOST: "${TESLA_API_HOST}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      teslamate:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/readyz >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  grafana:
+    image: "${GRAFANA_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      TZ: "${TZ}"
+      DATABASE_HOST: postgres
+      DATABASE_NAME: "${POSTGRES_DB}"
+      DATABASE_USER: "${POSTGRES_USER}"
+      DATABASE_PASS: "${POSTGRES_PASSWORD}"
+      GF_SERVER_ROOT_URL: "${GRAFANA_URL}"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD}"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../runtime/teslamate-cn/grafana:/var/lib/grafana
+    restart: unless-stopped
+
+  acme:
+    image: "${ACME_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      DOMAIN: "${TM_DOMAIN}"
+      ACME_EMAIL: "${ACME_EMAIL}"
+      TLS_MODE: "${TLS_MODE}"
+      ACME_CA_SERVER: "${ACME_CA_SERVER}"
+      ACME_STAGING: "${ACME_STAGING}"
+    volumes:
+      - ../../runtime/teslamate-cn/acme:/acme.sh
+      - ../../runtime/teslamate-cn/certs:/certs
+      - ../../runtime/teslamate-cn/acme-webroot:/var/www/acme
+    restart: unless-stopped
+
+  edge:
+    image: "${EDGE_IMAGE}"
+    env_file:
+      - ../../runtime/teslamate-cn/service.env
+    environment:
+      DOMAIN: "${TM_DOMAIN}"
+      API_TOKEN: "${API_TOKEN}"
+      BASIC_AUTH_FILE: /etc/nginx/secrets/teslamate.htpasswd
+      TLS_MODE: "${TLS_MODE}"
+      NGINX_CLIENT_MAX_BODY_SIZE: "${NGINX_CLIENT_MAX_BODY_SIZE}"
+      NGINX_RATE_LIMIT: "${NGINX_RATE_LIMIT}"
+      NGINX_RATE_LIMIT_BURST: "${NGINX_RATE_LIMIT_BURST}"
+    ports:
+      - "${EDGE_HTTP_PUBLISH:-80:80}"
+      - "${EDGE_HTTPS_PUBLISH:-443:443}"
+    depends_on:
+      teslamate:
+        condition: service_healthy
+      teslamateapi:
+        condition: service_healthy
+      grafana:
+        condition: service_started
+      tile-proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/nginx-healthz >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ../../runtime/teslamate-cn/certs:/etc/nginx/tls
+      - ../../runtime/teslamate-cn/acme-webroot:/var/www/acme
+      - ../../runtime/teslamate-cn/nginx/htpasswd:/etc/nginx/secrets/teslamate.htpasswd:ro
+      - ../../runtime/teslamate-cn/logs/nginx:/var/log/nginx
+    restart: unless-stopped

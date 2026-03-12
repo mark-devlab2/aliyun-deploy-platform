@@ -69,6 +69,12 @@ def normalize_build_contract(doc: dict) -> dict:
     service_id = doc.get("serviceId", "").strip()
     registries, production_registry = normalize_registry_map(doc)
     images = []
+    runtime = doc.get("runtime", {})
+    if not isinstance(runtime, dict):
+        raise SystemExit("build contract runtime must be an object")
+    runtime_type = str(runtime.get("type", "node")).strip() or "node"
+    if runtime_type not in {"node", "container-mirror"}:
+        raise SystemExit(f"unsupported runtime.type: {runtime_type}")
 
     if not service_id:
         raise SystemExit("build contract missing serviceId")
@@ -99,6 +105,10 @@ def normalize_build_contract(doc: dict) -> dict:
 
     return {
         "serviceId": service_id,
+        "runtime": {
+            **runtime,
+            "type": runtime_type,
+        },
         "test": doc.get("test", {}),
         "deploy": {
             **doc.get("deploy", {}),

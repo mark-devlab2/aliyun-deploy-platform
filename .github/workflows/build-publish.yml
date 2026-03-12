@@ -48,15 +48,6 @@ jobs:
           path: .deploy-platform
           token: ${{ secrets.PLATFORM_REPO_TOKEN || github.token }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install service dependencies
-        run: npm ci
-
       - name: Resolve build contract
         id: contract
         run: |
@@ -66,10 +57,23 @@ jobs:
           import os
 
           doc = json.load(open("contract.json", "r", encoding="utf-8"))
+          runtime_type = doc.get("runtime", {}).get("type", "node")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
               fh.write(f"service_id={doc['serviceId']}\n")
               fh.write(f"default_target={doc.get('deploy', {}).get('defaultTarget', 'full')}\n")
+              fh.write(f"runtime_type={runtime_type}\n")
           PY
+
+      - name: Set up Node.js
+        if: ${{ steps.contract.outputs.runtime_type == 'node' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install service dependencies
+        if: ${{ steps.contract.outputs.runtime_type == 'node' }}
+        run: npm ci
 
       - name: Run tests
         run: |
