@@ -31,6 +31,9 @@ services:
         condition: service_started
       admin-web:
         condition: service_started
+    networks:
+      default:
+      public-edge:
 
   postgres:
     image: postgres:16
@@ -61,3 +64,8 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
+
+networks:
+  public-edge:
+    name: "himark-public-edge"
+    external: true
